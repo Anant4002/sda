@@ -1,0 +1,42 @@
+function $id(id) {
+    return document.getElementById(id);
+}
+
+export const elements = {
+    analysisPanel: $id("analysisPanel"),
+    hoverPanel: $id("hoverPanel"),
+    statusLine: $id("statusLine"),
+    controlsPanel: $id("controlsPanel"),
+    controlsToggle: $id("controlsToggle"),
+    moduleSidebarRoot: $id("moduleSidebarRoot"),
+    moduleDock: $id("moduleDock"),
+    moduleDockContainer: $id("moduleDockContainer"),
+    moduleDockToggle: $id("moduleDockToggle"),
+    moduleEyebrow: $id("moduleEyebrow"),
+    moduleTitle: $id("moduleTitle"),
+    moduleSubtitle: $id("moduleSubtitle"),
+
+    get horizonSelect() { return $id("horizonSelect"); },
+    get collisionThresholdSelect() { return $id("collisionThresholdSelect"); },
+    get minAltitudeSelect() { return $id("minAltitudeSelect"); },
+    get maxAltitudeSelect() { return $id("maxAltitudeSelect"); },
+    get visibilityThresholdSelect() { return $id("visibilityThresholdSelect"); },
+    get analysisTypeSelect() { return $id("analysisTypeSelect"); },
+    get traceAreaButton() { return $id("traceAreaButton"); },
+    get finishTraceButton() { return $id("finishTraceButton"); },
+    get analyzeButton() { return $id("analyzeButton"); },
+    get clearButton() { return $id("clearButton"); },
+    get areaReadout() { return $id("areaReadout"); },
+    get collisionAlertCard() { return $id("collisionAlertCard"); },
+    get collisionAlertBadge() { return $id("collisionAlertBadge"); },
+    get collisionAlertSummary() { return $id("collisionAlertSummary"); },
+    get catalogStatusSummary() { return $id("catalogStatusSummary"); },
+    get catalogHistoryList() { return $id("catalogHistoryList"); },
+    get operationalAlertSummary() { return $id("operationalAlertSummary"); },
+    get operationalAlertList() { return $id("operationalAlertList"); },
+    get indianSummary() { return $id("indianSummary"); },
+    get indianSatList() { return $id("indianSatList"); },
+    get satelliteSearchInput() { return $id("satelliteSearchInput"); },
+    get hiddenGroupsSummary() { return $id("hiddenGroupsSummary"); },
+    get resetHiddenGroupsButton() { return $id("resetHiddenGroupsButton"); }
+};
