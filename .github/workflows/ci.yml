@@ -52,6 +52,22 @@ jobs:
                     sleep 2
                   done
 
+            -   name: Debug environment
+                run: |
+                    echo "DB_HOST=$DB_HOST"
+                    echo "DB_PORT=$DB_PORT"
+                    echo "DB_NAME=$DB_NAME"
+
+            -   name: Check postgres container
+                run: docker ps
+
+            -   name: Install postgres client
+                run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+            -   name: Verify postgres connection
+                run: |
+                    PGPASSWORD=1234 psql -h 127.0.0.1 -U postgres -d Satellite -c "\l"
+
             - name: Run tests
               run: npm test
 
