@@ -471,7 +471,7 @@ export function drawDriftTracks(drift) {
     const sortedTracks = [...drift.tracks].sort((a, b) => a.dayOffset - b.dayOffset);
     const trackPositions = [];
 
-    const altitudeStepMeters = 20000 * Math.max(1, appState.driftMagnification);
+    const altitudeStepMeters = 30000 * Math.max(1, appState.driftMagnification);
 
     sortedTracks.forEach((track, tIdx) => {
         if (!track.samples || track.samples.length < 2) return;
@@ -485,7 +485,7 @@ export function drawDriftTracks(drift) {
         trackPositions.push(positionsProperty);
 
         const baseColor = Cesium.Color.fromCssColorString(track.color || "#ffffff");
-        const opacity = track.isCurrent ? 1.0 : (0.3 + (0.7 * (tIdx / sortedTracks.length)));
+        const opacity = track.isCurrent ? 1.0 : Math.max(0.18, 0.58 - (0.1 * tIdx));
         const color = baseColor.withAlpha(opacity);
 
         // Render Orbit Ring
@@ -493,7 +493,7 @@ export function drawDriftTracks(drift) {
             name: `Drift Ring Day ${track.dayOffset}`,
             polyline: {
                 positions: positionsProperty,
-                width: track.isCurrent ? 10 : 6,
+                width: track.isCurrent ? 10 : 5,
                 material: new Cesium.ColorMaterialProperty(color),
                 clampToGround: false,
                 arcType: Cesium.ArcType.NONE,
@@ -509,14 +509,14 @@ export function drawDriftTracks(drift) {
                 return positions[0] || null;
             }, false),
             point: {
-                pixelSize: track.isCurrent ? 18 : 12,
+                pixelSize: track.isCurrent ? 18 : 10,
                 color: color,
                 outlineColor: Cesium.Color.BLACK,
                 outlineWidth: 2,
                 disableDepthTestDistance: Number.POSITIVE_INFINITY
             },
             label: {
-                text: track.dayOffset === 0 ? "CURRENT" : `DAY ${track.dayOffset}`,
+                text: track.dayOffset === 0 ? "NOW" : `T-${track.dayOffset}D`,
                 font: "bold 14px monospace",
                 fillColor: Cesium.Color.WHITE,
                 outlineColor: Cesium.Color.BLACK,
@@ -1106,5 +1106,4 @@ export function clearRapidTracks() {
     // Basic cleanup - in a real app we'd track these in an array
     viewer.entities.values.filter(e => e.name && (e.name.includes("Ballistic") || e.name.includes("Hypersonic") || e.name.includes("Meteor"))).forEach(e => viewer.entities.remove(e));
 }
-
 

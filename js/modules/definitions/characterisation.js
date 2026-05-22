@@ -11,7 +11,7 @@ function buildSidebar() {
         <div class="section-group">
             <div class="section">
                 <div class="section-title">
-                    <i class="fas fa-radar"></i> TRACK INGESTION
+                    <i class="fas fa-radar"></i> Track Ingestion
                 </div>
                 <div class="input-group" style="margin-top:8px;">
                     <input type="text" id="ingestName" placeholder="Temporary ID (optional)" style="font-size:11px; width:100%; margin-bottom:4px;">
@@ -26,8 +26,11 @@ function buildSidebar() {
 
             <div class="section">
                 <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
-                    <span>UNCORRELATED TARGETS (UCTs)</span>
+                    <span>Uncorrelated Targets</span>
                     <span id="uctCountBadge" class="badge badge-danger" style="display:none; font-size:9px;">0</span>
+                </div>
+                <div class="micro-card" style="margin-top:8px; font-size:0.8em; color:var(--text-dim);">
+                    India is building an independent orbital intelligence catalog. UCTs are reviewed here first.
                 </div>
                 <div id="uctList" class="list" style="margin-top:8px; max-height:160px; overflow-y:auto;">
                     <div class="hint">Scanning for UCTs...</div>
@@ -36,7 +39,7 @@ function buildSidebar() {
         </div>
 
         <div class="section" style="border-top: 1px solid var(--border-color); padding-top:16px;">
-            <div class="section-title">INDIGENOUS CATALOGUE</div>
+            <div class="section-title">Indigenous Orbital Catalog</div>
             <div class="search-box" style="margin-top:8px;">
                 <input type="text" id="catalogSearchInput" placeholder="Search by name, NORAD..." style="width:100%; font-size:11px;">
             </div>
@@ -45,24 +48,24 @@ function buildSidebar() {
 
         <div id="charDetailContainer" class="section detail-panel" style="display:none; margin-top:16px; background: rgba(255,255,255,0.03); border-radius: 4px; padding: 12px; border: 1px solid var(--border-color);">
             <div style="display:flex; justify-content:space-between; align-items:start;">
-                <div class="section-title" id="detailTitle" style="margin-bottom:0; font-size:0.9em;">OBJECT INTELLIGENCE</div>
+                <div class="section-title" id="detailTitle" style="margin-bottom:0; font-size:0.9em;">Object Intelligence</div>
                 <button id="closeDetailBtn" style="background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:16px; padding:0;">&times;</button>
             </div>
             
             <div id="charReadout" style="margin-top:12px;"></div>
 
             <div id="uctWorkflowContainer" style="display:none; margin-top:16px; padding-top:16px; border-top: 1px dashed var(--border-color);">
-                <div class="section-title" style="font-size:0.75em; color:var(--severity-warning);">SENSING STRATEGY</div>
+                <div class="section-title" style="font-size:0.75em; color:var(--severity-warning);">Sensor Tasking</div>
                 <div id="uctMetrics" style="margin-top:8px; font-size:10px;"></div>
                 <div id="sensorRecommendations" class="list" style="margin-top:8px;"></div>
             </div>
 
             <div style="margin-top:16px;">
-                <div class="section-title" style="font-size:0.75em;">INTELLIGENCE NOTES</div>
+                <div class="section-title" style="font-size:0.75em;">Operator Notes</div>
                 <textarea id="intDataInput" placeholder="Attach manual intelligence notes..." style="width:100%; height:60px; margin-top:4px; font-size:11px;"></textarea>
                 <div style="display:flex; gap:6px; margin-top:8px;">
-                    <button id="saveIntDataBtn" class="primary" style="flex:1; font-size:10px;">Update INT</button>
-                    <button id="tagSuspiciousBtn" class="danger" style="flex:1; font-size:10px;">Tag Suspicious</button>
+                    <button id="saveIntDataBtn" class="primary" style="flex:1; font-size:10px;">Save Notes</button>
+                    <button id="tagSuspiciousBtn" class="danger" style="flex:1; font-size:10px;">Flag Suspicious</button>
                 </div>
             </div>
         </div>
@@ -73,7 +76,7 @@ export default {
     id: "characterisation-cataloguing",
     label: "Characterisation and Cataloguing",
     eyebrow: "SDA Intelligence",
-    description: "Indigenous catalogue management and UCT correlation.",
+    description: "Indian orbital intelligence catalog with UCT correlation and sensor tasking.",
     dockEyebrow: "Intelligence",
     dockLabel: "Characterisation",
     status: "ready",

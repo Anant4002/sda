@@ -10,7 +10,6 @@ import {
 import { eventBus, events } from "../eventBus.js";
 
 const STRATEGIC_SITES = [
-    // Indian Nuclear & Military Targets
     { name: "Pokhran Test Range", lat: 27.095, lon: 71.753 },
     { name: "INS Vikramaditya (Naval)", lat: 18.960, lon: 72.820 },
     { name: "Siachen Glacier (LAC)", lat: 35.421, lon: 77.582 },
@@ -44,7 +43,7 @@ let currentBaseDate = new Date(); // Controls the date we are analyzing
 
 const SATELLITE_GROUPS = [
     { id: "grp_chinese", label: "Adversary (Recon/LEO)", regex: /YAOGAN|GAOFEN|SHIJIAN|TIANHUI|ZHUHAI/i, selected: true },
-    { id: "grp_indian", label: "Indian Recon (LEO)", regex: /CARTOSAT|RISAT|RESOURCESAT|OCEANSAT|SCATSAT|EMISAT|HYSIS|EOS-/i, selected: false },
+    { id: "grp_indian", label: "Indian Assets", regex: /^(?:GSAT|INSAT|IRNSS|NVS|CARTOSAT|RISAT|RESOURCESAT|OCEANSAT|SCATSAT|EMISAT|HYSIS|EOS-|MICROSAT|SARAL|MEGHA|KALPANA|TECHSAT|YOUTHSAT|INSPIRE|IMS-)/i, selected: false },
     { id: "grp_us", label: "US Assets", regex: /USA-|NOAA|GOES|LANDSAT|TDRS/i, selected: false },
     { id: "grp_commercial", label: "Commercial", regex: /PLANET|MAXAR|BLACKSKY|WORLDVIEW|SKYSAT|FLOCK/i, selected: false },
     { id: "grp_military", label: "Other Military", regex: /COSMOS|DEFENSE|MILSTAR/i, selected: false }
@@ -104,7 +103,7 @@ function buildSidebar() {
         <div class="section">
             <div class="section-title">Coverage Filters</div>
             <div class="micro-card" style="margin-bottom: 8px; font-size: 11px; color: var(--text-dim);">
-                Note: GEO satellites (GSAT/Chinadat) are excluded to show meaningful gaps in reconnaissance coverage.
+                Indian assets include LEO, MEO, and GEO missions. Select the asset families you want to evaluate.
             </div>
             <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">
                 ${groupsHtml}
@@ -282,7 +281,9 @@ function updateTracedAreaVisual(clock, satrecs, viewer, focusedSite, sensorConeA
     }
 
     if (!appState.selectedArea.grid && appState.selectedArea.bounds) {
-        appState.selectedArea.grid = generateGrid(appState.selectedArea.bounds, 100);
+        appState.selectedArea.grid = buildRegionGrid(appState.selectedArea, 100);
+    } else if (Array.isArray(appState.selectedArea.grid) && Array.isArray(appState.selectedArea.points) && appState.selectedArea.points.length >= 3) {
+        appState.selectedArea.grid = appState.selectedArea.grid.filter((pt) => pointInPolygon(pt, appState.selectedArea.points));
     }
 
     const site = {
@@ -304,9 +305,8 @@ function updateTracedAreaVisual(clock, satrecs, viewer, focusedSite, sensorConeA
     const totalCount = appState.selectedArea.grid ? appState.selectedArea.grid.length : 1;
     const percent = (coveredCount / totalCount) * 100;
 
-    let polyColor = Cesium.Color.YELLOW;
-    if (percent >= 99) polyColor = Cesium.Color.GREEN;
-    if (percent <= 1) polyColor = Cesium.Color.RED;
+    const isCovered = percent >= 99;
+    const polyColor = isCovered ? Cesium.Color.GREEN : Cesium.Color.RED;
 
     if (!tracedAreaEntity) {
         tracedAreaEntity = viewer.entities.add({
@@ -339,6 +339,10 @@ function updateTracedAreaVisual(clock, satrecs, viewer, focusedSite, sensorConeA
     }
 
     if (appState.selectedArea.grid && appState.selectedArea.grid.length > 0) {
+        if (gridEntities.length !== appState.selectedArea.grid.length) {
+            clearGridVisuals(viewer);
+        }
+
         if (gridEntities.length === 0) {
             appState.selectedArea.grid.forEach(pt => {
                 const covResult = checkCoverage(pt.lat, pt.lon, clock, satrecs, sensorConeAngleDeg);
@@ -423,11 +427,11 @@ function renderSchedule(scheduleContainer, schedule) {
     if (!scheduleContainer) return;
 
     if (schedule.length === 0) {
-        scheduleContainer.innerHTML = `<div class="empty-state">No blind spots detected. Region is continuously monitored.</div>`;
+        scheduleContainer.innerHTML = `<div class="empty-state">No blind windows detected. The computed assessment remains stable until the next recalculation.</div>`;
         return;
     }
 
-    const missingGroups = SATELLITE_GROUPS.filter(g => g.selected).map(g => g.label).join(", ");
+    const coverageGroups = SATELLITE_GROUPS.filter(g => g.selected).map(g => g.label).join(", ");
     const istOffset = 5.5 * 60 * 60 * 1000;
 
     scheduleContainer.innerHTML = schedule.map(bs => {
@@ -435,13 +439,13 @@ function renderSchedule(scheduleContainer, schedule) {
         const istEnd = new Date(bs.end.getTime() + istOffset);
         return `
             <div class="list-item danger" style="padding: 10px; margin-bottom: 8px;">
-                <div style="font-weight:bold; margin-bottom: 4px; color: var(--severity-danger);">BLIND SPOT (IST)</div>
+                <div style="font-weight:bold; margin-bottom: 4px; color: var(--severity-danger);">Computed Blind Window</div>
                 <div style="display:flex; justify-content:space-between; font-size: 0.85em; color: var(--text-dim); margin-bottom: 4px;">
                     <span>Start: ${istStart.toISOString().substr(11,5)}</span>
                     <span>End: ${istEnd.toISOString().substr(11,5)}</span>
                 </div>
                 <div style="font-size: 0.85em; margin-bottom: 4px;">Duration: <strong style="color:white;">${bs.duration} mins</strong></div>
-                <div style="font-size: 0.75em; color: var(--text-dim); font-style: italic;">Sensor Exclusion: ${missingGroups || "None"}</div>
+                <div style="font-size: 0.75em; color: var(--text-dim); font-style: italic;">Coverage set: ${coverageGroups || "None"}</div>
             </div>
         `;
     }).join("");
@@ -460,11 +464,37 @@ function generateGrid(bounds, count = 15) {
     return grid;
 }
 
+function pointInPolygon(point, polygon) {
+    if (!point || !Array.isArray(polygon) || polygon.length < 3) return false;
+
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const xi = polygon[i].lon;
+        const yi = polygon[i].lat;
+        const xj = polygon[j].lon;
+        const yj = polygon[j].lat;
+
+        const intersects = ((yi > point.lat) !== (yj > point.lat)) &&
+            (point.lon < ((xj - xi) * (point.lat - yi)) / ((yj - yi) || 1e-12) + xi);
+        if (intersects) inside = !inside;
+    }
+    return inside;
+}
+
+function buildRegionGrid(area, count = 100) {
+    if (!area?.bounds) return [];
+    const rawGrid = generateGrid(area.bounds, count);
+    if (!Array.isArray(area.points) || area.points.length < 3) {
+        return rawGrid;
+    }
+    return rawGrid.filter((pt) => pointInPolygon(pt, area.points));
+}
+
 export default {
     id: "blind-spot-detection",
     label: "Blind Spot Detection",
     eyebrow: "Coverage Intelligence",
-    description: "Detect when and where strategic regions lose satellite coverage over a 24-hour window. Supports playback and filtering.",
+    description: "Computed operational blind spot assessment for strategic regions over a 24-hour window.",
     dockEyebrow: "Coverage",
     dockLabel: "Blind Spot",
     status: "ready",
@@ -515,8 +545,6 @@ export default {
         const cbGroup = document.querySelectorAll(".sat-group-cb");
         const timeframeButtons = document.querySelectorAll(".bs-timeframe-btn");
 
-        let lastCalcTime = 0;
-
         // Define helper functions before they're used in event handlers
         const triggerRecalculate = () => {
             currentSatrecs = getFilteredSatrecs();
@@ -533,10 +561,25 @@ export default {
                 const schedule = generateSchedule(target, currentSatrecs, analysisTimeframeHours, sensorConeAngleDeg);
                 lastBlindSpotSchedule = schedule;
                 renderSchedule(scheduleContainer, schedule);
+
+                const clock = appState.realTimeClock || new Date();
+                updateSiteVisuals(clock, currentSatrecs, ctx.shared.viewer, focusedSite, sensorConeAngleDeg);
+                updateTracedAreaVisual(clock, currentSatrecs, ctx.shared.viewer, focusedSite, sensorConeAngleDeg);
+
+                if (statusBadge) {
+                    if (currentSatrecs.length === 0) {
+                        statusBadge.textContent = "NO SATELLITES SELECTED";
+                        statusBadge.style.color = "var(--severity-warning)";
+                    } else if (schedule.length === 0) {
+                        statusBadge.textContent = "COVERAGE STABLE";
+                        statusBadge.style.color = "var(--severity-success)";
+                    } else {
+                        statusBadge.textContent = "BLIND WINDOWS MAPPED";
+                        statusBadge.style.color = "var(--severity-danger)";
+                    }
+                }
             }
 
-            // Force immediate visual update by resetting throttle
-            lastCalcTime = 0;
             updateCurrentTimeUI();
         };
 
@@ -552,9 +595,10 @@ export default {
                 setStatus("No blind spot schedule to export.");
                 return;
             }
-            const rows = [["Area", "Start (IST)", "End (IST)", "Duration (mins)", "Satellite Groups"]];
+            const rows = [["Area", "Start (IST)", "End (IST)", "Duration (mins)", "Satellite Groups", "Selected Satellites"]];
             const areaName = lastActiveTarget ? lastActiveTarget.name : "Unknown Area";
             const satGroups = SATELLITE_GROUPS.filter(g => g.selected).map(g => g.label).join("; ");
+            const selectedSatellites = currentSatrecs.map((sat) => sat.name).join("; ");
 
             lastBlindSpotSchedule.forEach(bs => {
                 const istStart = new Date(bs.start.getTime() + 5.5 * 60 * 60 * 1000);
@@ -564,7 +608,8 @@ export default {
                     istStart.toISOString().substr(11, 5),
                     istEnd.toISOString().substr(11, 5),
                     bs.duration.toString(),
-                    satGroups
+                    satGroups,
+                    selectedSatellites
                 ]);
             });
 
@@ -585,6 +630,7 @@ export default {
             }
             const areaName = lastActiveTarget ? lastActiveTarget.name : "Unknown Area";
             const satGroups = SATELLITE_GROUPS.filter(g => g.selected).map(g => ({ id: g.id, label: g.label }));
+            const selectedSatellites = currentSatrecs.map((sat) => sat.name);
 
             const data = {
                 exportedAt: new Date().toISOString(),
@@ -594,6 +640,7 @@ export default {
                     sensorConeAngleDeg,
                     satelliteGroups: satGroups
                 },
+                selectedSatellites,
                 blindSpots: lastBlindSpotSchedule.map(bs => ({
                     startIST: new Date(bs.start.getTime() + 5.5 * 60 * 60 * 1000).toISOString().substr(11, 5),
                     endIST: new Date(bs.end.getTime() + 5.5 * 60 * 60 * 1000).toISOString().substr(11, 5),
@@ -624,10 +671,8 @@ export default {
             });
         });
 
-        let lastVisualClockMs = 0;
         const updateCurrentTimeUI = () => {
             const clock = appState.realTimeClock || new Date();
-            const currentTimeMs = clock.getTime();
 
             if (timeDisplay) timeDisplay.textContent = formatIST(clock);
             if (scrubber) {
@@ -635,72 +680,7 @@ export default {
                 midnight.setUTCHours(0,0,0,0);
                 scrubber.value = (clock.getTime() - midnight.getTime()) / 1000;
             }
-
-            // Stability Logic:
-            // 1. Update if clock jumped by > 1 minute (e.g. scrubber or manual update)
-            // 2. Update if SIM time advanced by >= 30 seconds
-            // 3. Update if manually triggered (lastCalcTime === 0)
-            // 4. Update if REAL time passed > 2s while paused (to reflect parameter changes)
-            const simTimeDiff = Math.abs(currentTimeMs - lastVisualClockMs);
-            const realTimeDiff = Date.now() - lastCalcTime;
-
-            const shouldUpdateVisuals = (lastVisualClockMs === 0) ||
-                                       (lastCalcTime === 0) ||
-                                       (simTimeDiff >= 30000) ||
-                                       (appState.realTimeMultiplier === 0 && realTimeDiff > 2000);
-
-            if (shouldUpdateVisuals) {
-                updateSiteVisuals(clock, currentSatrecs, ctx.shared.viewer, focusedSite, sensorConeAngleDeg);
-                updateTracedAreaVisual(clock, currentSatrecs, ctx.shared.viewer, focusedSite, sensorConeAngleDeg);
-                lastVisualClockMs = currentTimeMs;
-                lastCalcTime = Date.now();
-            }
-
-            let activeTarget = focusedSite;
-            if (!activeTarget && hasSelectedArea()) {
-                activeTarget = {
-                    name: appState.selectedArea.name || "Traced Region",
-                    lat: appState.selectedArea.centroid.lat,
-                    lon: appState.selectedArea.centroid.lon
-                };
-            }
-
-            if (activeTarget && statusBadge) {
-                if (currentSatrecs.length === 0) {
-                    statusBadge.textContent = "NO SATELLITES SELECTED";
-                    statusBadge.style.color = "var(--severity-warning)";
-                } else if (appState.selectedArea && appState.selectedArea.grid && !focusedSite) {
-                    let count = 0;
-                    for (let i=0; i<appState.selectedArea.grid.length; i++) {
-                        const res = checkCoverage(appState.selectedArea.grid[i].lat, appState.selectedArea.grid[i].lon, clock, currentSatrecs, sensorConeAngleDeg);
-                        if (res && res !== "NO_SATS") count++;
-                    }
-                    const percent = Math.round((count / appState.selectedArea.grid.length) * 100);
-
-                    if (percent === 100) {
-                        statusBadge.textContent = "REGION COVERED";
-                        statusBadge.style.color = "var(--severity-success)";
-                    } else if (percent === 0) {
-                        statusBadge.textContent = "BLIND SPOT ACTIVE";
-                        statusBadge.style.color = "var(--severity-danger)";
-                    } else {
-                        statusBadge.textContent = `PARTIAL: ${percent}%`;
-                        statusBadge.style.color = "var(--severity-warning)";
-                    }
-                } else {
-                    const covResult = checkCoverage(activeTarget.lat, activeTarget.lon, clock, currentSatrecs, sensorConeAngleDeg);
-                    if (covResult === "NO_SATS") {
-                        statusBadge.textContent = "NO SATELLITES SELECTED";
-                        statusBadge.style.color = "var(--severity-warning)";
-                    } else if (!covResult) {
-                        statusBadge.textContent = "BLIND SPOT ACTIVE";
-                        statusBadge.style.color = "var(--severity-danger)";
-                    } else {
-                        statusBadge.textContent = "REGION COVERED";
-                        statusBadge.style.color = "var(--severity-success)";
-                    }
-                }
-            } else if (statusBadge) {
+            if (statusBadge && !focusedSite && !hasSelectedArea()) {
                 statusBadge.textContent = "SELECT REGION";
                 statusBadge.style.color = "white";
             }
@@ -780,8 +760,11 @@ export default {
                     appState.selectedArea = {
                         name: name,
                         centroid: { lat, lon },
-                        points: flattened.map(c => ({ lat: c[1], lon: c[0] })).filter((_, i) => i % 50 === 0),
-                        grid: generateGrid({ minLat, maxLat, minLon, maxLon }, 100),
+                        points: flattened.map(c => ({ lat: c[1], lon: c[0] })),
+                        grid: buildRegionGrid({
+                            bounds: { minLat, maxLat, minLon, maxLon },
+                            points: flattened.map(c => ({ lat: c[1], lon: c[0] }))
+                        }, 100),
                         bounds: { minLat, maxLat, minLon, maxLon }
                     };
 

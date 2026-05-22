@@ -56,6 +56,9 @@ function buildSidebar() {
             selectControl("minAltitudeSelect", MIN_ALTITUDE_OPTIONS, { ariaLabel: "Minimum altitude" }),
             selectControl("maxAltitudeSelect", MAX_ALTITUDE_OPTIONS, { ariaLabel: "Maximum altitude" })
         ]))}
+        <div class="micro-card" style="margin-top:8px; font-size:0.85em; color: var(--text-dim);">
+            High-risk conjunction escalation layer for Indian assets. Focuses on Pc, miss distance, relative velocity, and TCA.
+        </div>
         ${buildRegionTracingMarkup()}
     `;
 }
@@ -80,7 +83,7 @@ function runCollisionDetection(ctx) {
     appState.analysisWorkerBusy = true;
     appState.activeSatellitePathId = null;
 
-    setStatus("Running Indian Asset Collision Risk Assessment...");
+    setStatus("Running high-risk conjunction escalation...");
     
     // Mission Requirement: Focus on Indian satellites vs the full catalog
     fetchBackendConjunctionAnalysis({
@@ -110,7 +113,7 @@ function runCollisionDetection(ctx) {
             drawCollisionRiskMarkers(ctx.shared.viewer, criticalAlerts);
             setStatus(`CRITICAL: ${criticalAlerts.length} high-probability collision risks detected!`);
         } else {
-            setStatus(`Collision screening complete. ${response.result.conjunctions?.length || 0} proximity events monitored.`);
+            setStatus(`Escalation complete. ${response.result.conjunctions?.length || 0} conjunctions reviewed.`);
         }
 
         await ctx.shared.refreshOperationalAlerts(response.apiBaseUrl);
@@ -168,47 +171,26 @@ function handleCollisionClick(idx, ctx) {
     const conj = conjunctions[idx];
     if (!conj) return;
 
-    setStatus(`Emergency Engagement: ${conj.primaryId} (Pc: ${conj.collisionProbability.toExponential(2)})`);
+    setStatus(`Escalation review: ${conj.primaryId} (Pc: ${conj.collisionProbability.toExponential(2)})`);
 
-    // Prepare path visualization
-    const paths = [
-        {
-            id: conj.primaryId,
-            color: Cesium.Color.CYAN.toCssColorString(),
-            width: 4.0,
-            samples: conj.primaryPath
+    drawConjunctionEvent(conj);
+
+    const tca = Cesium.JulianDate.fromIso8601(conj.time);
+    ctx.shared.viewer.clock.currentTime = Cesium.JulianDate.addSeconds(tca, -60, new Cesium.JulianDate());
+    ctx.shared.viewer.clock.shouldAnimate = true;
+    ctx.shared.viewer.clock.multiplier = 5;
+
+    const pPos = new Cesium.Cartesian3(conj.primaryPos.x * 1000, conj.primaryPos.y * 1000, conj.primaryPos.z * 1000);
+    const sPos = new Cesium.Cartesian3(conj.secondaryPos.x * 1000, conj.secondaryPos.y * 1000, conj.secondaryPos.z * 1000);
+    const midpoint = Cesium.Cartesian3.lerp(pPos, sPos, 0.5, new Cesium.Cartesian3());
+
+    ctx.shared.viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.add(midpoint, Cesium.Cartesian3.multiplyByScalar(Cesium.Cartesian3.normalize(midpoint, new Cesium.Cartesian3()), 100000, new Cesium.Cartesian3()), new Cesium.Cartesian3()),
+        orientation: {
+            direction: Cesium.Cartesian3.subtract(midpoint, ctx.shared.viewer.camera.position, new Cesium.Cartesian3()),
+            up: Cesium.Cartesian3.UNIT_Z
         },
-        {
-            id: conj.secondaryId,
-            color: Cesium.Color.RED.toCssColorString(),
-            width: 4.0,
-            samples: conj.secondaryPath
-        }
-    ];
-
-    // Use specific conjunction visualization
-    import("../../viewer.js").then(viewer => {
-        viewer.drawConjunctionEvent(conj);
-        
-        // Simulation Jump
-        const tca = Cesium.JulianDate.fromIso8601(conj.time);
-        ctx.shared.viewer.clock.currentTime = Cesium.JulianDate.addSeconds(tca, -60, new Cesium.JulianDate());
-        ctx.shared.viewer.clock.shouldAnimate = true;
-        ctx.shared.viewer.clock.multiplier = 5;
-
-        // Focus camera on encounter
-        const pPos = new Cesium.Cartesian3(conj.primaryPos.x * 1000, conj.primaryPos.y * 1000, conj.primaryPos.z * 1000);
-        const sPos = new Cesium.Cartesian3(conj.secondaryPos.x * 1000, conj.secondaryPos.y * 1000, conj.secondaryPos.z * 1000);
-        const midpoint = Cesium.Cartesian3.lerp(pPos, sPos, 0.5, new Cesium.Cartesian3());
-        
-        ctx.shared.viewer.camera.flyTo({
-            destination: Cesium.Cartesian3.add(midpoint, Cesium.Cartesian3.multiplyByScalar(Cesium.Cartesian3.normalize(midpoint, new Cesium.Cartesian3()), 100000, new Cesium.Cartesian3()), new Cesium.Cartesian3()),
-            orientation: {
-                direction: Cesium.Cartesian3.subtract(midpoint, ctx.shared.viewer.camera.position, new Cesium.Cartesian3()),
-                up: Cesium.Cartesian3.UNIT_Z
-            },
-            duration: 2.0
-        });
+        duration: 2.0
     });
 }
 
@@ -216,7 +198,7 @@ export default {
     id: "collision-detection",
     label: "Collision Detection",
     eyebrow: "Threat Operations",
-    description: "Screen the traced region for close approaches at small distance thresholds.",
+    description: "High-risk conjunction escalation for Indian assets and small-miss events.",
     dockEyebrow: "Threat",
     dockLabel: "Collisions",
     status: "ready",

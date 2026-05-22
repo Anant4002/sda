@@ -52,14 +52,13 @@ const ALTITUDE_OPTIONS = [
 function buildSidebar() {
     return `
         <div class="section">
-            <div class="section-title">Screening Parameters</div>
+            <div class="section-title">Operational Screening</div>
             ${field("Look-ahead Window", selectControl("horizonSelect", HORIZON_OPTIONS), { id: "horizonSelect" })}
             ${field("Miss Distance Threshold", selectControl("collisionThresholdSelect", CONJUNCTION_THRESHOLD_OPTIONS), { id: "collisionThresholdSelect" })}
             ${field("Asset Filter", selectControl("assetFilterSelect", FILTER_OPTIONS), { id: "assetFilterSelect" })}
             ${field("Altitude Band", selectControl("altitudeSelect", ALTITUDE_OPTIONS), { id: "altitudeSelect" })}
-
-            <div id="conjunctionEstimate" class="readout" style="margin-top: 10px; font-size: 0.85em; color: var(--text-dim);">
-                Estimated Time: --
+            <div class="micro-card" style="margin-top: 10px; font-size: 0.85em; color: var(--text-dim);">
+                Ranked by TCA, miss distance, relative velocity, and Pc. Results are intended for operational review.
             </div>
         </div>
 
@@ -68,40 +67,6 @@ function buildSidebar() {
             ${buildRegionTracingMarkup()}
         </div>
     `;
-}
-
-function updateEstimate() {
-    const horizonSelect = document.getElementById("horizonSelect");
-    const assetFilterSelect = document.getElementById("assetFilterSelect");
-    const estimateEl = document.getElementById("conjunctionEstimate");
-
-    if (!horizonSelect || !estimateEl) return;
-
-    const horizon = Number(horizonSelect.value);
-    const filter = assetFilterSelect?.value || "all";
-    const satCount = appState.satellites.length || 5000;
-
-    let seconds = 0;
-    // Empirical complexity constants for this POC
-    if (filter === "all") {
-        // O(N^2 * H)
-        seconds = (satCount * satCount * horizon) / 100000000;
-    } else {
-        // O(M * N * H) where M is around 50-100
-        seconds = (100 * satCount * horizon) / 10000000;
-    }
-
-    // Add base propagation overhead
-    seconds += (satCount * horizon) / 500000;
-
-    const finalSec = Math.max(1, Math.round(seconds));
-    estimateEl.textContent = `Estimated Time: ~${finalSec}s`;
-
-    if (finalSec > 30) {
-        estimateEl.style.color = "var(--severity-warning)";
-    } else {
-        estimateEl.style.color = "var(--text-dim)";
-    }
 }
 
 function runConjunction(ctx) {
@@ -178,6 +143,7 @@ function handleConjunctionClick(idx, ctx) {
 
     setStatus(`Analyzing engagement geometry: ${conj.primaryId} ↔ ${conj.secondaryId}`);
 
+    setStatus(`Analyzing engagement geometry: ${conj.primaryId} -> ${conj.secondaryId}`);
     drawConjunctionEvent(conj);
 
     // Jump clock to TCA - 1 minute to show animation
@@ -225,11 +191,6 @@ export default {
             onAnalyze: () => runConjunction(ctx)
         });
 
-        // Add listeners for estimate updates
-        scope.add(document.getElementById("horizonSelect"), "change", updateEstimate);
-        scope.add(document.getElementById("assetFilterSelect"), "change", updateEstimate);
-        scope.add(document.getElementById("altitudeSelect"), "change", updateEstimate);
-
         // Analysis Panel listeners (delegated)
         const analysisPanel = document.getElementById("analysisPanel");
         scope.add(analysisPanel, "click", (e) => {
@@ -242,7 +203,6 @@ export default {
 
         updateAreaReadout();
         updateCollisionAlert(null);
-        updateEstimate();
 
         return {
             unmount() {

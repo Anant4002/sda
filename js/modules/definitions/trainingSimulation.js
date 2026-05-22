@@ -185,6 +185,14 @@ function renderStatusPanel() {
     const nextEvent = session
         ? (scenario.timeline || []).find((item) => item.minute > elapsedMinutes)
         : (scenario.timeline || [])[0];
+    const missionOutcome = session?.status === "completed"
+        ? (score.triggeredEvents && score.acknowledgedEvents >= Math.max(1, Math.ceil(score.triggeredEvents * 0.75)) ? "PASS" : "REVIEW")
+        : null;
+    const missionSummary = missionOutcome === "PASS"
+        ? "Exercise completed with timely acknowledgements and controlled escalation."
+        : missionOutcome === "REVIEW"
+            ? "Exercise completed, but response timing or acknowledgements should be reviewed in debrief."
+            : "Scenario loaded and ready for exercise execution.";
 
     return `
         <div class="metric-grid" style="margin-bottom:12px;">
@@ -223,8 +231,9 @@ function renderStatusPanel() {
             </div>
             ${session?.status === "completed" ? `
                 <div class="list-item success">
-                    <strong>Exercise Complete</strong>
-                    The scenario has reached its final checkpoint. Use Replay Scenario to run it again, or Reset to return to the start and pause for debrief.
+                    <strong>Exercise Complete${missionOutcome ? ` - ${missionOutcome}` : ""}</strong>
+                    ${escapeHtml(missionSummary)}<br>
+                    <small>Use Replay Scenario to run it again, or Reset to return to the start and pause for debrief.</small>
                 </div>
             ` : ""}
         </div>

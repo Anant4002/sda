@@ -255,7 +255,7 @@ export function renderAreaAnalysis(result) {
     const analysisLabel = result.analysisType === "volumetric_scan" ? "Volumetric Scan" :
                           result.analysisType === "blind_spot" ? "Blind Spot Detection" :
                           result.analysisType === "conjunction_analysis" ? "Conjunction Analysis" :
-                          result.analysisType === "collision_detection" ? "Collision Detection" : "Analysis";
+                          result.analysisType === "collision_detection" ? "High-Risk Escalation" : "Analysis";
 
     // Prioritize backend-returned values to ensure sync
     const thresholdLabel = result.proximityThresholdKm || result.conjunctionThresholdKm || result.visibilityThresholdDeg || 25;
@@ -275,7 +275,7 @@ export function renderAreaAnalysis(result) {
         elements.analysisPanel.innerHTML = safeHtml`
             <div class="eyebrow">${escapeHtml(analysisLabel)}</div>
             <h2>${formatLatitude((result.region || result.area).centroid.lat)} , ${formatLongitude((result.region || result.area).centroid.lon)}</h2>
-            <p>Blind spot detection evaluated ${result.evaluatedSatelliteCount} satellites for visibility coverage in the traced region across a ${forecastMinutes} minute forecast window.</p>
+            <p>Computed blind spot assessment for the selected region. Results remain stable until the next operator recalculation.</p>
 
             <div class="metric-grid">
                 <div class="metric-card">
@@ -291,8 +291,8 @@ export function renderAreaAnalysis(result) {
                     <div class="value">${forecastMinutes}m</div>
                 </div>
                 <div class="metric-card">
-                    <div class="label">Coverage</div>
-                    <div class="value">${result.hasCoverage ? "Yes" : "No"}</div>
+                    <div class="label">Assessment</div>
+                    <div class="value">${result.hasCoverage ? "COVERED" : "BLIND"}</div>
                 </div>
                 <div class="metric-card">
                     <div class="label">Satellites</div>
@@ -308,8 +308,8 @@ export function renderAreaAnalysis(result) {
                 <div class="section-title">Detection Result</div>
                 <div class="list">
                     <div class="list-item ${result.hasCoverage ? "success" : "danger"}">
-                        <strong>${result.hasCoverage ? "Coverage Detected" : "Blind Spot Identified"}</strong>
-                        ${result.hasCoverage ? "At least one satellite provides visibility coverage in this region during the forecast window." : "No satellite provides adequate visibility coverage in this region during the forecast window."}
+                        <strong>${result.hasCoverage ? "Coverage Stable" : "Blind Window Confirmed"}</strong>
+                        ${result.hasCoverage ? "At least one satellite provides visibility coverage in this region for the computed window." : "No satellite provides adequate visibility coverage in this region for the computed window."}
                     </div>
                 </div>
             </div>
@@ -398,12 +398,12 @@ export function renderAreaAnalysis(result) {
 
         elements.analysisPanel.innerHTML = safeHtml`
             <div class="eyebrow">${escapeHtml(analysisLabel)}</div>
-            <h2>Collision Risk Report</h2>
-            <p>High-resolution screening focused on national assets. Probability (Pc) calculated using the Foster analytical method with TLE-derived uncertainty.</p>
+            <h2>High-Risk Conjunction Escalation</h2>
+            <p>Operational escalation layer focused on national assets. Results highlight the conjunctions most likely to require command attention.</p>
 
             <div class="metric-grid">
                 <div class="metric-card">
-                    <div class="label">Critical Risks</div>
+                    <div class="label">Critical Escalations</div>
                     <div class="value">${conjunctions.filter(c => c.collisionProbability > 1e-4).length}</div>
                 </div>
                 <div class="metric-card">
@@ -417,9 +417,9 @@ export function renderAreaAnalysis(result) {
             </div>
 
             <div class="section">
-                <div class="section-title">Collision Risk Table</div>
+                <div class="section-title">Escalation Table</div>
                 <div class="list">
-                    ${markSafe(conjunctionItems || '<div class="hint">No collision risks detected for Indian assets within the selected window.</div>')}
+                    ${markSafe(conjunctionItems || '<div class="hint">No high-risk conjunctions detected for Indian assets within the selected window.</div>')}
                 </div>
             </div>
         `;
@@ -460,7 +460,7 @@ export function renderAreaAnalysis(result) {
 
         elements.analysisPanel.innerHTML = safeHtml`
             <div class="eyebrow">${escapeHtml(analysisLabel)}</div>
-            <h2>SDA Orbital Safety Report</h2>
+            <h2>Operational Conjunction Report</h2>
             <p>Operational conjunction screening identifying high-risk close approaches. Results are ranked by minimum separation distance and collision probability (Pc).</p>
 
             <div class="metric-grid">
@@ -493,8 +493,7 @@ export function renderAreaAnalysis(result) {
                 <div class="section-title">Analysis Parameters</div>
                 <div class="micro-card">
                     Screening Threshold: ${thresholdLabel} km<br>
-                    Epoch: ${formatDateTime(result.startTime || new Date())}<br>
-                    Numerical Refinement: 1.0s step
+                    Epoch: ${formatDateTime(result.startTime || new Date())}
                 </div>
             </div>
         `;

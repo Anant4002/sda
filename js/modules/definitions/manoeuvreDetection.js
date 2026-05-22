@@ -16,7 +16,7 @@ function buildSidebar() {
             <div id="driftControls" style="display: none;">
                 <div class="micro-card" style="margin-bottom: 12px;">
                     Target: <strong id="driftTargetLabel" style="color: var(--text-bright);">None</strong><br>
-                    Layered historical trajectories visualize orbital evolution over time.
+                    Layered historical trajectories visualize how the orbit changes over time.
                 </div>
 
                 <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;">
@@ -33,7 +33,7 @@ function buildSidebar() {
                         <label for="driftMagnificationToggle" style="font-size: 0.85em; cursor: pointer;">Drift Magnification Mode</label>
                         <input type="checkbox" id="driftMagnificationToggle" style="cursor: pointer;">
                     </div>
-                    <div style="font-size: 0.75em; color: var(--text-dim); margin-top: -8px;">Visually amplifies separation between historical rings for easier analysis.</div>
+                    <div style="font-size: 0.75em; color: var(--text-dim); margin-top: -8px;">Visually separates historical rings so drift stays readable.</div>
                 </div>
 
                 <button id="driftExitFocusButton" class="secondary" type="button" style="width: 100%; margin-bottom: 12px; display: none;">Exit Focus Mode</button>
@@ -44,12 +44,12 @@ function buildSidebar() {
                 </div>
 
                 <div id="driftMetrics" class="micro-card" style="display: none; margin-bottom: 12px; border-left: 2px solid var(--text-accent);">
-                    <div style="font-size: 0.85em; font-weight: bold; margin-bottom: 6px;">Operational Metrics</div>
+                    <div style="font-size: 0.85em; font-weight: bold; margin-bottom: 6px;">Drift Metrics</div>
                     <div id="driftMetricsContent" style="display: flex; flex-direction: column; gap: 6px; font-family: var(--font-mono); font-size: 0.85em;"></div>
                 </div>
 
                 <div id="driftLegend" class="micro-card" style="display: none; margin-bottom: 12px;">
-                    <div style="font-size: 0.85em; font-weight: bold; margin-bottom: 6px;">Evolution Timeline</div>
+                    <div style="font-size: 0.85em; font-weight: bold; margin-bottom: 6px;">Temporal Overlay</div>
                     <div id="driftLegendItems" style="display: flex; align-items: center; gap: 4px; overflow-x: auto; padding-bottom: 4px;"></div>
                 </div>
             </div>
