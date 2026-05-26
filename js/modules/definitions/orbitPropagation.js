@@ -1,6 +1,7 @@
 import { appState } from "../../state.js";
 import { renderDefaultAnalysis, setStatus } from "../../ui.js";
 import { ListenerScope } from "../../ui/panelSystem.js";
+import { eventBus, events } from "../eventBus.js";
 
 function buildSidebar() {
     return `
@@ -12,20 +13,17 @@ function buildSidebar() {
         <div class="section">
             <div class="section-title">Orbit Path Preview</div>
             <div class="list">
-                <div class="list-item warning">
-                    <strong>Click any satellite</strong>
-                    Click a satellite point on the globe to render one full orbital revolution. Click the same satellite again to remove the trace.
-                </div>
                 <div class="list-item">
-                    <strong>Indian satellite</strong>
-                    Selecting an Indian satellite automatically triggers a backend neighbourhood watch screening.
+                    <strong>Click any satellite</strong><br>
+                    Click a satellite point on the globe to render one full orbital revolution. Click the same satellite again to remove the trace.
                 </div>
             </div>
         </div>
+        
         <div class="section">
             <div class="section-title">Active Selection</div>
             <div id="orbitActiveSelection" class="micro-card">No orbit currently rendered.</div>
-            <button id="orbitClearButton" class="secondary" type="button">Clear Orbit Preview</button>
+            <button id="orbitClearButton" class="secondary" type="button" style="margin-top: 10px; width: 100%;">Clear Orbit Preview</button>
         </div>
     `;
 }
@@ -64,6 +62,10 @@ export default {
         });
 
         renderActiveSelection();
+        
+        scope.addCleanup(eventBus.on(events.satelliteSelected, () => renderActiveSelection()));
+        scope.addCleanup(eventBus.on(events.satelliteCleared, () => renderActiveSelection()));
+
         if (typeof ctx.shared.setInertialView === "function") {
             ctx.shared.setInertialView(true);
         }

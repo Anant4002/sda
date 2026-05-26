@@ -13,6 +13,9 @@ const {
     analyzeRegionScanFromRecords,
     analyzeBlindSpotFromRecords
 } = require("./regionAnalysisService");
+const {
+    runRegionalPresenceAnalysis
+} = require("./regionalPresenceAnalysisService");
 
 async function runBackendConjunctionAnalysis({ area, horizonMinutes, conjunctionThresholdKm, minAltitudeKm, maxAltitudeKm, filters, time }) {
     const records = await loadPropagationRecords();
@@ -53,6 +56,21 @@ async function runBackendBlindSpot({ area, horizonMinutes, minAltitudeKm, maxAlt
     );
 }
 
+async function runBackendRegionalPresence({ area, timeframeDays, baselineSplitDays, sampleMinutes, visibilityThresholdDeg, maxFindings, satelliteName, noradId, time, maxSatellites }) {
+    return runRegionalPresenceAnalysis({
+        area,
+        timeframeDays,
+        baselineSplitDays,
+        sampleMinutes,
+        visibilityThresholdDeg,
+        maxFindings,
+        satelliteName,
+        noradId,
+        time,
+        maxSatellites
+    });
+}
+
 module.exports = {
     // Domain Services (Exporting original function names for backward compatibility if needed)
     // NOTE: preserve legacy symbol name for callers/tests that expect the volumetric region scan behavior
@@ -88,5 +106,6 @@ module.exports = {
     runBackendConjunctionAnalysis,
     runBackendNeighbourhoodWatch,
     runBackendRegionScan,
-    runBackendBlindSpot
+    runBackendBlindSpot,
+    runBackendRegionalPresence
 };

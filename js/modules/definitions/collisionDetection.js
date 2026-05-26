@@ -57,7 +57,7 @@ function buildSidebar() {
             selectControl("maxAltitudeSelect", MAX_ALTITUDE_OPTIONS, { ariaLabel: "Maximum altitude" })
         ]))}
         <div class="micro-card" style="margin-top:8px; font-size:0.85em; color: var(--text-dim);">
-            High-risk conjunction escalation layer for Indian assets. Focuses on Pc, miss distance, relative velocity, and TCA.
+            High-risk collision detection layer for Indian assets. Focuses on Pc, miss distance, relative velocity, and TCA.
         </div>
         ${buildRegionTracingMarkup()}
     `;
@@ -83,7 +83,7 @@ function runCollisionDetection(ctx) {
     appState.analysisWorkerBusy = true;
     appState.activeSatellitePathId = null;
 
-    setStatus("Running high-risk conjunction escalation...");
+    setStatus("Running high-risk collision detection...");
     
     // Mission Requirement: Focus on Indian satellites vs the full catalog
     fetchBackendConjunctionAnalysis({
@@ -113,7 +113,7 @@ function runCollisionDetection(ctx) {
             drawCollisionRiskMarkers(ctx.shared.viewer, criticalAlerts);
             setStatus(`CRITICAL: ${criticalAlerts.length} high-probability collision risks detected!`);
         } else {
-            setStatus(`Escalation complete. ${response.result.conjunctions?.length || 0} conjunctions reviewed.`);
+            setStatus(`Collision detection complete. ${response.result.conjunctions?.length || 0} events reviewed.`);
         }
 
         await ctx.shared.refreshOperationalAlerts(response.apiBaseUrl);
@@ -171,14 +171,21 @@ function handleCollisionClick(idx, ctx) {
     const conj = conjunctions[idx];
     if (!conj) return;
 
-    setStatus(`Escalation review: ${conj.primaryId} (Pc: ${conj.collisionProbability.toExponential(2)})`);
+    setStatus(`Collision risk review: ${conj.primaryId} (Pc: ${conj.collisionProbability.toExponential(2)})`);
 
     drawConjunctionEvent(conj);
 
     const tca = Cesium.JulianDate.fromIso8601(conj.time);
-    ctx.shared.viewer.clock.currentTime = Cesium.JulianDate.addSeconds(tca, -60, new Cesium.JulianDate());
+    const animStart = Cesium.JulianDate.addSeconds(tca, -60, new Cesium.JulianDate());
+
+    appState.simulationMode = true;
+    appState.simulationClock = Cesium.JulianDate.toDate(animStart);
+    appState.simulationPaused = false;
+    appState.simulationSpeed = 5;
+
+    ctx.shared.viewer.clock.currentTime = animStart;
     ctx.shared.viewer.clock.shouldAnimate = true;
-    ctx.shared.viewer.clock.multiplier = 5;
+    ctx.shared.viewer.clock.multiplier = 1.0; // We drive speed via appState now
 
     const pPos = new Cesium.Cartesian3(conj.primaryPos.x * 1000, conj.primaryPos.y * 1000, conj.primaryPos.z * 1000);
     const sPos = new Cesium.Cartesian3(conj.secondaryPos.x * 1000, conj.secondaryPos.y * 1000, conj.secondaryPos.z * 1000);
@@ -198,7 +205,7 @@ export default {
     id: "collision-detection",
     label: "Collision Detection",
     eyebrow: "Threat Operations",
-    description: "High-risk conjunction escalation for Indian assets and small-miss events.",
+    description: "High-risk collision detection for Indian assets and small-miss events.",
     dockEyebrow: "Threat",
     dockLabel: "Collisions",
     status: "ready",
@@ -240,6 +247,9 @@ export default {
         return {
             unmount() {
                 clearCollisionMarkers(ctx.shared.viewer);
+                appState.simulationMode = false;
+                appState.simulationClock = null;
+                appState.simulationPaused = true;
                 scope.dispose();
             }
         };

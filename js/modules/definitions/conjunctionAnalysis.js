@@ -150,9 +150,14 @@ function handleConjunctionClick(idx, ctx) {
     const tca = Cesium.JulianDate.fromIso8601(conj.time);
     const animStart = Cesium.JulianDate.addSeconds(tca, -60, new Cesium.JulianDate());
 
+    appState.simulationMode = true;
+    appState.simulationClock = Cesium.JulianDate.toDate(animStart);
+    appState.simulationPaused = false;
+    appState.simulationSpeed = 5;
+
     ctx.shared.viewer.clock.currentTime = animStart;
     ctx.shared.viewer.clock.shouldAnimate = true;
-    ctx.shared.viewer.clock.multiplier = 5; // 5x speed for operational feel
+    ctx.shared.viewer.clock.multiplier = 1.0; // We drive speed via appState now
 
     // Focus camera on the conjunction point
     const pPos = new Cesium.Cartesian3(conj.primaryPos.x * 1000, conj.primaryPos.y * 1000, conj.primaryPos.z * 1000);
@@ -208,6 +213,9 @@ export default {
             unmount() {
                 scope.dispose();
                 clearConjunctionVisuals();
+                appState.simulationMode = false;
+                appState.simulationClock = null;
+                appState.simulationPaused = true;
             }
         };
     }

@@ -94,6 +94,12 @@ export function buildSatelliteGroups(satellites) {
     });
 }
 
+const COMMERCIAL_SATELLITE_NAME_REGEX = /PLANET|MAXAR|BLACKSKY|WORLDVIEW|SKYSAT|FLOCK|STARLINK|ONEWEB|KUIPER|DIGUI/i;
+
+export function isCommercialSatelliteName(name) {
+    return COMMERCIAL_SATELLITE_NAME_REGEX.test(String(name || ""));
+}
+
 export function computeBounds(points) {
     return points.reduce((bounds, point) => ({
         minLat: Math.min(bounds.minLat, point.lat),

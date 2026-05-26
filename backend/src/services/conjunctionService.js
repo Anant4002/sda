@@ -28,10 +28,6 @@ const {
  * Aligned with SDA Operational Standards.
  */
 async function analyzeConjunctionsFromRecords(records, area, startTime, horizonMinutes, conjunctionThresholdKm, filters = {}) {
-    if (area && Array.isArray(area.points) && area.points.length >= 3) {
-        // Use the conjunctionThreshold as the proximity threshold for region scans
-        return analyzeRegionScanFromRecords(records, area, startTime, horizonMinutes, filters.minAltitudeKm, filters.maxAltitudeKm, conjunctionThresholdKm);
-    }
     const startDate = new Date(startTime);
     const thresholdKm = conjunctionThresholdKm || DEFAULT_CONJUNCTION_DISTANCE_KM;
     const thresholdSq = thresholdKm * thresholdKm;
@@ -79,15 +75,24 @@ async function analyzeConjunctionsFromRecords(records, area, startTime, horizonM
     let secondaryPool = records;
     let isSymmetric = true;
 
+    // If an area is provided, optimize by only checking satellites that enter that volume
+    const areaIsActive = area && Array.isArray(area.points) && area.points.length >= 3;
+    if (areaIsActive) {
+        const regionScan = analyzeRegionScanFromRecords(records, area, startTime, horizonMinutes, minAltitudeKm, maxAltitudeKm, thresholdKm);
+        const satIdsInRegion = new Set(regionScan.passes.map(p => p.id));
+        primaryPool = records.filter(r => satIdsInRegion.has(r.id));
+        secondaryPool = records.filter(r => satIdsInRegion.has(r.id));
+    }
+
     if (filters.assetFilter === "indian" || filters.indianOnly) {
-        primaryPool = records.filter(r => r.isIndian);
+        primaryPool = primaryPool.filter(r => r.isIndian);
         isSymmetric = false;
     } else if (filters.assetFilter === "adversary") {
-        primaryPool = records.filter(r => /YAOGAN|GAOFEN|SHIJIAN|TIANHUI|ZHUHAI|COSMOS/i.test((r.id || "").toUpperCase()));
+        primaryPool = primaryPool.filter(r => /YAOGAN|GAOFEN|SHIJIAN|TIANHUI|ZHUHAI|COSMOS/i.test((r.id || "").toUpperCase()));
         isSymmetric = false;
     } else if (filters.assetFilter === "custom" && Array.isArray(filters.customList) && filters.customList.length) {
         const set = new Set(filters.customList.map(String).map(s => s.trim().toLowerCase()));
-        primaryPool = records.filter(r => set.has(String(r.id).toLowerCase()) || set.has(String(r.noradId)));
+        primaryPool = primaryPool.filter(r => set.has(String(r.id).toLowerCase()) || set.has(String(r.noradId)));
         isSymmetric = false;
     }
 
@@ -164,6 +169,13 @@ async function analyzeConjunctionsFromRecords(records, area, startTime, horizonM
                 if (minDistance <= thresholdKm) {
                     const state1 = propagateState(primary, bestTca, null);
                     const state2 = propagateState(secondary, bestTca, null);
+
+                    // Final Spatial Filter: Ensure TCA happens inside the traced region if active
+                    if (areaIsActive) {
+                        if (!pointInPolygon({ lat: state1.lat, lon: state1.lon }, area.points)) {
+                            continue;
+                        }
+                    }
 
                     let relVelKmS = 0;
                     if (state1?.velocityEci && state2?.velocityEci) {

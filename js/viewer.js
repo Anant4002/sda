@@ -1,7 +1,15 @@
 import { COLORS, INDIA_BOUNDARY_GEOJSON_URL } from "./config.js";
 import { appState } from "./state.js";
 import { setStatus } from "./ui.js";
-import { deriveSatelliteGroupLabel, formatNumber } from "./utils.js";
+import { deriveSatelliteGroupLabel, formatNumber, isCommercialSatelliteName } from "./utils.js";
+import "../shared/blindSpotCoverageUtils.js";
+
+const {
+    resolveSensorProfile,
+    computeOperationalRadiusKm,
+    computeCoverageStrength,
+    isEffectivelyCovered
+} = globalThis.blindSpotCoverageUtils;
 
 export const viewer = new Cesium.Viewer("cesiumContainer", {
     animation: false,
@@ -842,15 +850,16 @@ export function exitFocusedAnalysisMode() {
         const point = satellitePoints.get(i);
         const groupLabel = deriveSatelliteGroupLabel(point.id);
         const isGroupHidden = appState.hiddenGroupLabels.has(groupLabel);
+        const isCommercialHidden = appState.hideCommercialSatellites && isCommercialSatelliteName(point.id);
 
         const saved = appState.savedVisibilityState.get(`point:${point.id}`);
         if (saved !== undefined) {
-            // Restore saved state, but still respect global hidden groups
-            point.show = isGroupHidden ? false : saved;
+            // Restore saved state, but still respect global hidden groups and commercial filter
+            point.show = (isGroupHidden || isCommercialHidden) ? false : saved;
             if (point.show) restoredPoints++;
         } else {
-            // Default restore, respecting global hidden groups
-            point.show = !isGroupHidden;
+            // Default restore, respecting global filters
+            point.show = !isGroupHidden && !isCommercialHidden;
             if (point.show) restoredPoints++;
         }
     }
@@ -1105,5 +1114,166 @@ export function drawRapidTrack(track) {
 export function clearRapidTracks() {
     // Basic cleanup - in a real app we'd track these in an array
     viewer.entities.values.filter(e => e.name && (e.name.includes("Ballistic") || e.name.includes("Hypersonic") || e.name.includes("Meteor"))).forEach(e => viewer.entities.remove(e));
+}
+
+export function clearRegionalAccessVisuals() {
+    if (appState.regionalAccessEntities) {
+        appState.regionalAccessEntities.forEach(e => viewer.entities.remove(e));
+        appState.regionalAccessEntities = [];
+    }
+}
+
+export function renderOperationalSwath(satelliteId, profile, time) {
+    const point = appState.pointMap.get(satelliteId);
+    if (!point || !point.position) return null;
+
+    const cartographic = Cesium.Cartographic.fromCartesian(point.position);
+    const altitudeKm = cartographic.height / 1000;
+    
+    // We assume the satellite is looking at its nadir for the swath visualization
+    // In a real SDA system, this would use actual sensor pointing.
+    const radiusKm = computeOperationalRadiusKm({
+        profile,
+        geometricRadiusKm: altitudeKm * Math.tan(Cesium.Math.toRadians(profile.maxOffNadirDeg || 30)),
+        coverageStrength: 1.0 // Idealised swath at nadir
+    });
+
+    return {
+        position: point.position,
+        radius: radiusKm * 1000
+    };
+}
+
+export function drawRegionalAccessIntelligence(details) {
+    clearRegionalAccessVisuals();
+    if (!appState.regionalAccessEntities) appState.regionalAccessEntities = [];
+
+    const severityColors = {
+        high: Cesium.Color.RED,
+        medium: Cesium.Color.ORANGE,
+        low: Cesium.Color.YELLOW
+    };
+    const mainColor = severityColors[details.operationalSeverity] || Cesium.Color.CYAN;
+
+    // 1. Old vs New Orbit Comparison
+    drawPredictedPaths([
+        { ...details.oldOrbit, width: 3, style: "dotted" },
+        { ...details.newOrbit, width: 5, color: mainColor.toCssColorString() }
+    ]);
+    // Note: drawPredictedPaths adds to appState.pathEntities, which is fine, 
+    // but we might want them in regionalAccessEntities for combined cleanup.
+    appState.regionalAccessEntities.push(...appState.pathEntities);
+
+    // 2. Recent Pass Arc
+    if (details.latestPassTrack && details.latestPassTrack.length > 1) {
+        const arcEntity = viewer.entities.add({
+            name: "Recent Regional Pass Arc",
+            polyline: {
+                positions: buildPathPositionsProperty(details.latestPassTrack),
+                width: 8,
+                material: new Cesium.PolylineGlowMaterialProperty({
+                    glowPower: 0.3,
+                    color: mainColor
+                }),
+                arcType: Cesium.ArcType.NONE,
+                zIndex: 50
+            }
+        });
+        appState.regionalAccessEntities.push(arcEntity);
+    }
+
+    // 3. First Access Marker
+    if (details.firstDetectedAccess) {
+        const firstAccessDate = Cesium.JulianDate.fromIso8601(details.firstDetectedAccess);
+        // Find the sample in newOrbit that is closest to firstDetectedAccess time
+        let closestSample = details.newOrbit.samples[0];
+        if (details.newOrbit.samples.length > 1) {
+            const targetMs = new Date(details.firstDetectedAccess).getTime();
+            let minDiff = Infinity;
+            for (const s of details.newOrbit.samples) {
+                if (s.time) {
+                    const diff = Math.abs(new Date(s.time).getTime() - targetMs);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closestSample = s;
+                    }
+                }
+            }
+        }
+
+        const firstAccessPos = (closestSample && closestSample.lat !== undefined) 
+            ? Cesium.Cartesian3.fromDegrees(closestSample.lon, closestSample.lat, (closestSample.altKm || 400) * 1000) 
+            : (closestSample ? new Cesium.Cartesian3(closestSample.x * 1000, closestSample.y * 1000, closestSample.z * 1000) : null);
+
+        if (firstAccessPos) {
+            const marker = viewer.entities.add({
+                position: firstAccessPos,
+                point: {
+                    pixelSize: 12,
+                    color: Cesium.Color.WHITE,
+                    outlineColor: mainColor,
+                    outlineWidth: 3
+                },
+                label: {
+                    text: `FIRST ACCESS: ${new Date(details.firstDetectedAccess).toLocaleDateString()}`,
+                    font: "bold 12px monospace",
+                    fillColor: Cesium.Color.WHITE,
+                    outlineColor: Cesium.Color.BLACK,
+                    outlineWidth: 2,
+                    style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                    verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                    pixelOffset: new Cesium.Cartesian2(0, -20)
+                }
+            });
+            appState.regionalAccessEntities.push(marker);
+        }
+    }
+
+    // 4. Dynamic Operational Swath (attached to satellite)
+    const profile = details.sensorProfile;
+    const swathEntity = viewer.entities.add({
+        name: "Operational Observation Swath",
+        position: new Cesium.CallbackProperty(() => {
+            const point = appState.pointMap.get(details.satelliteName);
+            return point ? point.position : null;
+        }, false),
+        ellipse: {
+            semiMinorAxis: new Cesium.CallbackProperty(() => {
+                const swath = renderOperationalSwath(details.satelliteName, profile, viewer.clock.currentTime);
+                return swath ? swath.radius : 1000;
+            }, false),
+            semiMajorAxis: new Cesium.CallbackProperty(() => {
+                const swath = renderOperationalSwath(details.satelliteName, profile, viewer.clock.currentTime);
+                return swath ? swath.radius : 1000;
+            }, false),
+            material: mainColor.withAlpha(0.2),
+            outline: true,
+            outlineColor: mainColor,
+            height: 0
+        }
+    });
+    appState.regionalAccessEntities.push(swathEntity);
+
+    // 5. Visibility Corridor (Cone from satellite to region centroid)
+    const corridor = viewer.entities.add({
+        name: "Visibility Corridor",
+        polyline: {
+            positions: new Cesium.CallbackProperty(() => {
+                const satPoint = appState.pointMap.get(details.satelliteName);
+                if (!satPoint || !satPoint.position) return [];
+                const regionPos = Cesium.Cartesian3.fromDegrees(details.region.centroid.lon, details.region.centroid.lat, 0);
+                return [satPoint.position, regionPos];
+            }, false),
+            width: 2,
+            material: new Cesium.PolylineDashMaterialProperty({
+                color: mainColor.withAlpha(0.4),
+                dashLength: 10
+            }),
+            arcType: Cesium.ArcType.NONE
+        }
+    });
+    appState.regionalAccessEntities.push(corridor);
+
+    setStatus(`Visualizing orbital intelligence for ${details.satelliteName} over ${details.region.name}.`);
 }
 

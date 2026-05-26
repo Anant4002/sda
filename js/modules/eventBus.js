@@ -50,5 +50,6 @@ export const events = {
     SIMULATION_STARTED: "simulation:started",
     SIMULATION_UPDATED: "simulation:updated",
     SIMULATION_TICK: "simulation:tick",
-    SIMULATION_STOPPED: "simulation:stopped"
+    SIMULATION_STOPPED: "simulation:stopped",
+    CLOCK_UPDATED: "clock:updated"
 };

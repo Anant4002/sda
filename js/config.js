@@ -11,7 +11,9 @@ export const SATELLITE_CACHE_KEY = "satellite-catalog-cache-v1";
 export const SATELLITE_CACHE_TTL_MS = 5 * 60 * 1000;
 export const SATELLITE_POINT_BATCH_SIZE = 250;
 export const POSITION_UPDATE_INTERVAL_MS = 50;
-export const NEIGHBOURHOOD_WATCH_THRESHOLD_KM = 1000;
+export const NEIGHBOURHOOD_WATCH_THRESHOLD_KM = 500;
+export const NEIGHBOURHOOD_WATCH_WARNING_KM = 250;
+export const NEIGHBOURHOOD_WATCH_CRITICAL_KM = 100;
 
 const currentOrigin = window.location.origin;
 const currentPort = window.location.port;

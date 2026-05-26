@@ -1,9 +1,133 @@
 import { appState } from "../../state.js";
 import { setStatus } from "../../ui.js";
 import { escapeHtml } from "../../utils.js";
-import { fetchBackendManoeuvreDetection } from "../../analysisService.js";
+import { 
+    fetchBackendManoeuvreDetection, 
+    fetchBackendRegionalPresence, 
+    fetchBackendRegionalPresenceDetails 
+} from "../../analysisService.js";
 import { ListenerScope } from "../../ui/panelSystem.js";
 import { eventBus, events } from "../eventBus.js";
+
+const REGIONAL_ACCESS_PRESETS = {
+    delhi: {
+        name: "Delhi",
+        points: [
+            { lat: 28.20, lon: 76.85 },
+            { lat: 28.20, lon: 77.45 },
+            { lat: 28.95, lon: 77.45 },
+            { lat: 28.95, lon: 76.85 }
+        ]
+    },
+    pokhran: {
+        name: "Pokhran",
+        points: [
+            { lat: 26.90, lon: 71.45 },
+            { lat: 26.90, lon: 71.95 },
+            { lat: 27.40, lon: 71.95 },
+            { lat: 27.40, lon: 71.45 }
+        ]
+    },
+    siachen: {
+        name: "Siachen",
+        points: [
+            { lat: 34.85, lon: 74.95 },
+            { lat: 34.85, lon: 75.55 },
+            { lat: 35.35, lon: 75.55 },
+            { lat: 35.35, lon: 74.95 }
+        ]
+    }
+};
+
+function cloneArea(area) {
+    if (!area) {
+        return null;
+    }
+
+    return {
+        ...area,
+        points: Array.isArray(area.points) ? area.points.map((point) => ({ ...point })) : []
+    };
+}
+
+function resolveRegionalPresenceArea(selectionKey) {
+    if (selectionKey === "current" && appState.selectedArea) {
+        return cloneArea(appState.selectedArea);
+    }
+
+    if (selectionKey === "current") {
+        return null;
+    }
+
+    const preset = REGIONAL_ACCESS_PRESETS[selectionKey] || REGIONAL_ACCESS_PRESETS.delhi;
+    return cloneArea(preset);
+}
+
+function humanizeTrend(trend) {
+    if (trend === "new_access") {
+        return "New access";
+    }
+    if (trend === "rising") {
+        return "Rising";
+    }
+    if (trend === "declining") {
+        return "Declining";
+    }
+    if (trend === "stable") {
+        return "Stable";
+    }
+    return "None";
+}
+
+function formatTimestamp(value) {
+    if (!value) {
+        return "Unknown";
+    }
+
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "Unknown" : date.toLocaleString();
+}
+
+function renderRegionalPresenceFinding(finding) {
+    const severity = finding.operationalSeverity || "low";
+    const trend = humanizeTrend(finding.visibilityTrend);
+    const confidence = Number.isFinite(finding.confidenceScore) ? `${Math.round(finding.confidenceScore * 100)}%` : "Unknown";
+    const revisitChange = Number.isFinite(finding.revisitChangePercent) ? `${finding.revisitChangePercent >= 0 ? "+" : ""}${finding.revisitChangePercent.toFixed(0)}%` : "Unknown";
+
+    return `
+        <div class="micro-card" style="border-left: 4px solid var(--severity-${severity}); margin-bottom: 12px; padding: 12px; background: rgba(255,255,255,0.03);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px;">
+                <div>
+                    <div style="font-size: 0.95em; font-weight: bold; color: var(--text-bright);">${escapeHtml(finding.satelliteName || "Unknown satellite")}</div>
+                    <div style="font-size: 0.78em; color: var(--text-dim);">${escapeHtml(finding.regionName || "Regional area")}</div>
+                </div>
+                <div style="text-align: right;">
+                    <span class="badge badge-${severity}">${escapeHtml(severity.toUpperCase())}</span><br>
+                    <span style="font-family: var(--font-mono); color: var(--text-warning);">Conf. ${confidence}</span>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.84em; font-family: var(--font-mono);">
+                <div style="color: var(--text-dim);">NORAD: <span style="color: var(--text-main);">${finding.noradId ?? "Unknown"}</span></div>
+                <div style="color: var(--text-dim);">Trend: <span style="color: var(--text-main);">${escapeHtml(trend)}</span></div>
+                <div style="color: var(--text-dim);">Prev Passes: <span style="color: var(--text-main);">${finding.previousPassCount ?? 0}</span></div>
+                <div style="color: var(--text-dim);">Recent Passes: <span style="color: var(--text-main);">${finding.recentPassCount ?? 0}</span></div>
+                <div style="color: var(--text-dim);">Revisit Δ: <span style="color: var(--text-main);">${revisitChange}</span></div>
+                <div style="color: var(--text-dim);">Avg Vis. Min: <span style="color: var(--text-main);">${Number.isFinite(finding.averageVisibilityDuration) ? finding.averageVisibilityDuration.toFixed(1) : "0.0"}</span></div>
+                <div style="color: var(--text-dim);">First Access: <span style="color: var(--text-main);">${formatTimestamp(finding.firstDetectedAccess)}</span></div>
+            </div>
+
+            <div style="margin-top: 10px; display: flex; gap: 8px;">
+                <button class="visualize-finding-btn secondary tiny" 
+                        data-sat="${escapeHtml(finding.satelliteName)}" 
+                        data-norad="${finding.noradId || ""}"
+                        style="width: 100%;">
+                    Visualize Intelligence
+                </button>
+            </div>
+        </div>
+    `;
+}
 
 function buildSidebar() {
     return `
@@ -71,6 +195,78 @@ function buildSidebar() {
             <div id="manoeuvreEventLog" style="display: none;">
                 <div class="section-title">Manoeuvre Event Log</div>
                 <div id="manoeuvreLogContent" class="list"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Emerging Regional Access</div>
+            <div id="regionalPresenceNotice" class="micro-card warning" style="margin-bottom: 12px;">
+                Compare an earlier and recent visibility window to spot satellites that newly enter a strategic region.
+            </div>
+
+            <div id="regionalPresenceControls" style="display: flex; flex-direction: column; gap: 12px;">
+                <div class="micro-card" style="font-size: 0.85em; line-height: 1.4;">
+                    Uses historical TLE revisions and operational visibility scoring to identify newly emerging regional access.
+                </div>
+
+                <div style="display: flex; gap: 8px;">
+                    <select id="regionalPresenceRegionSelect" style="flex: 1;">
+                        <option value="current">Use Selected Region</option>
+                        <option value="delhi" selected>Delhi Preset</option>
+                        <option value="pokhran">Pokhran Preset</option>
+                        <option value="siachen">Siachen Preset</option>
+                    </select>
+                    <select id="regionalPresenceWindowSelect" style="width: 130px;">
+                        <option value="15">15 Days</option>
+                        <option value="30" selected>30 Days</option>
+                        <option value="60">60 Days</option>
+                    </select>
+                </div>
+
+                <button id="regionalPresenceRunButton" class="primary" type="button" style="width: 100%;">Analyze Regional Access</button>
+            </div>
+
+            <div id="regionalPresenceSummary" class="micro-card" style="display: none; margin-top: 12px; border-left: 2px solid var(--text-accent);">
+                <div style="font-size: 0.85em; font-weight: bold; margin-bottom: 6px;">Regional Presence Summary</div>
+                <div id="regionalPresenceSummaryContent" style="display: flex; flex-direction: column; gap: 6px; font-size: 0.85em;"></div>
+            </div>
+
+            <div id="regionalPresenceResults" class="list" style="margin-top: 12px;"></div>
+
+            <div id="regionalIntelligenceControls" style="display: none; margin-top: 12px;">
+                <div class="section-title">Timeline Replay</div>
+                <div class="micro-card" style="margin-bottom: 12px; border-left: 2px solid var(--text-accent);">
+                    <div id="replaySatLabel" style="font-weight: bold; color: var(--text-bright); margin-bottom: 4px;"></div>
+                    <div style="font-size: 0.8em; color: var(--text-dim); margin-bottom: 8px;">Scrub to replay 30-day orbital evolution and regional access emergence.</div>
+                    
+                    <input type="range" id="regionalReplayScrubber" min="0" max="100" value="0" style="width: 100%; margin-bottom: 8px;">
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span id="regionalReplayTimeLabel" style="font-family: var(--font-mono); font-size: 0.75em; color: var(--text-main);">01 May 2026</span>
+                        <button id="regionalReplayJumpBtn" class="secondary tiny">Jump to First Access</button>
+                    </div>
+
+                    <button id="regionalReplayPlayBtn" class="primary tiny" style="width: 100%; margin-bottom: 12px;">Play Evolution</button>
+
+                    <div id="regionalIntelligenceLegend" class="micro-card" style="font-size: 0.8em; background: rgba(0,0,0,0.2);">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                            <div style="width: 12px; height: 2px; border: 1px dashed #99b7c8;"></div>
+                            <span>Dotted: Baseline (Old Window)</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                            <div id="newOrbitLegendColor" style="width: 12px; height: 3px; background: var(--text-accent);"></div>
+                            <span>Solid: Emerging (New Window)</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                            <div style="width: 12px; height: 4px; background: rgba(255,255,255,0.8); border: 1px solid white;"></div>
+                            <span>Dot: Point of First Regional Access</span>
+                        </div>
+                        <div style="font-size: 0.85em; color: var(--text-dim); border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px;">
+                            Note: "Access" indicates the satellite was in the sky above the region (e.g. >10° elevation), not necessarily passing directly overhead.
+                        </div>
+                    </div>
+                </div>
+                <button id="exitRegionalIntelligenceBtn" class="secondary" style="width: 100%;">Clear Visualization</button>
             </div>
         </div>
     `;
@@ -164,8 +360,72 @@ export default {
         const manoeuvreAnalyzeButton = document.getElementById("manoeuvreAnalyzeButton");
         const manoeuvreEventLog = document.getElementById("manoeuvreEventLog");
         const manoeuvreLogContent = document.getElementById("manoeuvreLogContent");
+        const regionalPresenceNotice = document.getElementById("regionalPresenceNotice");
+        const regionalPresenceRegionSelect = document.getElementById("regionalPresenceRegionSelect");
+        const regionalPresenceWindowSelect = document.getElementById("regionalPresenceWindowSelect");
+        const regionalPresenceRunButton = document.getElementById("regionalPresenceRunButton");
+        const regionalPresenceSummary = document.getElementById("regionalPresenceSummary");
+        const regionalPresenceSummaryContent = document.getElementById("regionalPresenceSummaryContent");
+        const regionalPresenceResults = document.getElementById("regionalPresenceResults");
+        const regionalIntelligenceControls = document.getElementById("regionalIntelligenceControls");
+        const replaySatLabel = document.getElementById("replaySatLabel");
+        const regionalReplayScrubber = document.getElementById("regionalReplayScrubber");
+        const regionalReplayTimeLabel = document.getElementById("regionalReplayTimeLabel");
+        const regionalReplayPlayBtn = document.getElementById("regionalReplayPlayBtn");
+        const regionalReplayJumpBtn = document.getElementById("regionalReplayJumpBtn");
+        const exitRegionalIntelligenceBtn = document.getElementById("exitRegionalIntelligenceBtn");
+
+        let regionalPresenceSelectionTouched = false;
+        let isReplaying = false;
+        let replayTimer = null;
 
         const scope = new ListenerScope();
+
+        const renderRegionalPresenceSummary = (result) => {
+            const summary = result?.summary || {};
+            const debugMetrics = result?.debugMetrics || {};
+            regionalPresenceSummaryContent.innerHTML = `
+                <div style="display: flex; justify-content: space-between; gap: 12px;">
+                    <span>Region</span>
+                    <span style="color: var(--text-bright);">${escapeHtml(result?.region?.name || "Unknown")}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; gap: 12px;">
+                    <span>Window</span>
+                    <span style="color: var(--text-bright);">${result?.windowDays ?? 0}d</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; gap: 12px;">
+                    <span>Finding Count</span>
+                    <span style="color: var(--text-bright);">${summary.findingCount ?? 0}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; gap: 12px;">
+                    <span>Unexpected Access</span>
+                    <span style="color: var(--text-bright);">${summary.unexpectedRegionalPresenceCount ?? 0}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; gap: 12px;">
+                    <span>Avg Confidence</span>
+                    <span style="color: var(--text-bright);">${Number.isFinite(summary.averageConfidenceScore) ? `${Math.round(summary.averageConfidenceScore * 100)}%` : "0%"}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; gap: 12px;">
+                    <span>Coverage Pass Rate</span>
+                    <span style="color: var(--text-bright);">${Number.isFinite(debugMetrics.coveragePassRate) ? `${Math.round(debugMetrics.coveragePassRate * 100)}%` : "0%"}</span>
+                </div>
+            `;
+            regionalPresenceSummary.style.display = "block";
+        };
+
+        const renderRegionalPresenceResults = (result) => {
+            if (!result || !Array.isArray(result.findings) || !result.findings.length) {
+                regionalPresenceSummary.style.display = "block";
+                regionalPresenceSummaryContent.innerHTML = `
+                    <div style="color: var(--text-dim);">No satellites showed a sustained new regional access pattern in this window.</div>
+                `;
+                regionalPresenceResults.innerHTML = "";
+                return;
+            }
+
+            regionalPresenceResults.innerHTML = result.findings.map(renderRegionalPresenceFinding).join("");
+            renderRegionalPresenceSummary(result);
+        };
 
         const renderDriftMetrics = (drift) => {
             if (!drift || !drift.analysis) return;
@@ -270,6 +530,48 @@ export default {
                 manoeuvreTargetNotice.style.display = "block";
                 manoeuvreEventLog.style.display = "none";
             }
+
+            if (appState.regionalAccessDetails) {
+                regionalIntelligenceControls.style.display = "block";
+                replaySatLabel.textContent = appState.regionalAccessDetails.satelliteName;
+                const details = appState.regionalAccessDetails;
+                const startTime = new Date(details.baselineWindow.start).getTime();
+                const endTime = new Date(details.recentWindow.end).getTime();
+                const currentTime = Cesium.JulianDate.toDate(ctx.shared.viewer.clock.currentTime).getTime();
+                const percent = Math.max(0, Math.min(100, ((currentTime - startTime) / (endTime - startTime)) * 100));
+                
+                regionalReplayScrubber.value = percent;
+                
+                // Format date and time for better precision during replay
+                const dateObj = new Date(currentTime);
+                regionalReplayTimeLabel.textContent = `${dateObj.toLocaleDateString()} ${dateObj.getHours().toString().padStart(2, '0')}:${dateObj.getMinutes().toString().padStart(2, '0')}`;
+
+                // Sync legend color
+                const severityColors = {
+                    high: "#ff4d4d", // CSS equivalents of Cesium colors
+                    medium: "#ffa500",
+                    low: "#ffff00"
+                };
+                const legendColor = document.getElementById("newOrbitLegendColor");
+                if (legendColor) {
+                    legendColor.style.backgroundColor = severityColors[details.operationalSeverity] || "#00ffff";
+                }
+            } else {
+                regionalIntelligenceControls.style.display = "none";
+            }
+
+            if (regionalPresenceRegionSelect) {
+                if (!regionalPresenceSelectionTouched && appState.selectedArea) {
+                    regionalPresenceRegionSelect.value = "current";
+                }
+                if (appState.selectedArea && regionalPresenceRegionSelect.value === "current") {
+                    regionalPresenceNotice.textContent = `Using the traced region "${appState.selectedArea.name || "Selected Region"}" for regional presence analysis.`;
+                } else if (regionalPresenceRegionSelect.value === "current" && !appState.selectedArea) {
+                    regionalPresenceNotice.textContent = "No traced region is currently selected. Choose a preset region or trace a polygon first.";
+                } else {
+                    regionalPresenceNotice.textContent = "Compare an earlier and recent visibility window to spot satellites that newly enter a strategic region.";
+                }
+            }
             
             if (driftMagToggle) {
                 driftMagToggle.checked = appState.driftMagnification > 1.0;
@@ -286,12 +588,185 @@ export default {
             }
         });
 
+        scope.add(regionalPresenceRegionSelect, "change", () => {
+            regionalPresenceSelectionTouched = true;
+            syncUI();
+        });
+
+        scope.add(regionalPresenceRunButton, "click", async () => {
+            const regionKey = regionalPresenceRegionSelect?.value || "delhi";
+            const selectedArea = resolveRegionalPresenceArea(regionKey);
+            const timeframeDays = Number.parseInt(regionalPresenceWindowSelect?.value || "30", 10) || 30;
+
+            if (!selectedArea) {
+                setStatus("Select a traced region or preset before running regional presence analysis.");
+                return;
+            }
+
+            setStatus(`Analyzing emerging regional access for ${selectedArea.name || "selected region"} over ${timeframeDays} days...`);
+            regionalPresenceResults.innerHTML = "";
+            regionalPresenceSummary.style.display = "none";
+
+            try {
+                const currentTime = appState.simulationMode && appState.simulationClock
+                    ? appState.simulationClock
+                    : Cesium.JulianDate.toDate(ctx.shared.viewer.clock.currentTime);
+
+                const { result } = await fetchBackendRegionalPresence({
+                    area: selectedArea,
+                    timeframeDays,
+                    sampleMinutes: 30,
+                    visibilityThresholdDeg: 10,
+                    maxFindings: 10,
+                    time: currentTime.toISOString()
+                }, appState.catalogApiBaseUrl);
+
+                renderRegionalPresenceResults(result);
+                setStatus(`Regional presence analysis complete for ${selectedArea.name || "selected region"}.`);
+            } catch (error) {
+                console.error("Regional presence analysis failed:", error);
+                regionalPresenceSummary.style.display = "block";
+                regionalPresenceSummaryContent.innerHTML = `
+                    <div style="color: var(--text-danger);">Unable to complete regional presence analysis.</div>
+                `;
+                setStatus(`Regional presence analysis failed for ${selectedArea.name || "selected region"}.`);
+            }
+        });
+
+        // Listen for visualize clicks in the results list (event delegation)
+        scope.add(regionalPresenceResults, "click", async (e) => {
+            const btn = e.target.closest(".visualize-finding-btn");
+            if (!btn) return;
+
+            const satName = btn.dataset.sat;
+            const noradId = btn.dataset.norad;
+            const regionKey = regionalPresenceRegionSelect?.value || "delhi";
+            const selectedArea = resolveRegionalPresenceArea(regionKey);
+            const timeframeDays = Number.parseInt(regionalPresenceWindowSelect?.value || "30", 10) || 30;
+
+            setStatus(`Fetching orbital intelligence details for ${satName}...`);
+            
+            try {
+                const currentTime = appState.simulationMode && appState.simulationClock
+                    ? appState.simulationClock
+                    : Cesium.JulianDate.toDate(ctx.shared.viewer.clock.currentTime);
+
+                const { result } = await fetchBackendRegionalPresenceDetails({
+                    area: selectedArea,
+                    timeframeDays,
+                    satelliteName: satName,
+                    noradId: noradId ? Number(noradId) : undefined,
+                    time: currentTime.toISOString()
+                }, appState.catalogApiBaseUrl);
+
+                appState.regionalAccessDetails = result;
+                
+                // Set clock to beginning of analysis window for replay
+                const startJulian = Cesium.JulianDate.fromIso8601(result.baselineWindow.start);
+                appState.simulationMode = true;
+                appState.simulationClock = Cesium.JulianDate.toDate(startJulian);
+                
+                ctx.shared.viewer.clock.currentTime = startJulian;
+                ctx.shared.viewer.clock.shouldAnimate = false;
+
+                ctx.shared.drawRegionalAccessIntelligence(result);
+                syncUI();
+                setStatus(`Intelligence visualization active for ${satName}.`);
+            } catch (error) {
+                console.error("Failed to fetch regional access details:", error);
+                setStatus(`Failed to load intelligence details for ${satName}.`);
+            }
+        });
+
+        scope.add(regionalReplayScrubber, "input", () => {
+            if (!appState.regionalAccessDetails) return;
+            const details = appState.regionalAccessDetails;
+            const startTime = new Date(details.baselineWindow.start).getTime();
+            const endTime = new Date(details.recentWindow.end).getTime();
+            const targetTime = startTime + (endTime - startTime) * (regionalReplayScrubber.value / 100);
+            
+            const date = new Date(targetTime);
+            appState.simulationClock = date;
+            ctx.shared.viewer.clock.currentTime = Cesium.JulianDate.fromDate(date);
+            regionalReplayTimeLabel.textContent = `${date.toLocaleDateString()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+        });
+
+        const toggleReplay = () => {
+            isReplaying = !isReplaying;
+            regionalReplayPlayBtn.textContent = isReplaying ? "Pause Evolution" : "Play Evolution";
+            
+            if (isReplaying) {
+                appState.simulationPaused = true; // Use our own interval for precise % control
+                replayTimer = setInterval(() => {
+                    let val = parseInt(regionalReplayScrubber.value);
+                    if (val >= 100) {
+                        toggleReplay();
+                        return;
+                    }
+                    val += 1;
+                    regionalReplayScrubber.value = val;
+                    regionalReplayScrubber.dispatchEvent(new Event("input"));
+                }, 100);
+            } else {
+                if (replayTimer) clearInterval(replayTimer);
+            }
+        };
+
+        scope.addCleanup(eventBus.on(events.CLOCK_UPDATED, ({ time }) => {
+            if (appState.regionalAccessDetails && !isReplaying) {
+                const details = appState.regionalAccessDetails;
+                const startTime = new Date(details.baselineWindow.start).getTime();
+                const endTime = new Date(details.recentWindow.end).getTime();
+                const currentTime = time.getTime();
+                const percent = Math.max(0, Math.min(100, ((currentTime - startTime) / (endTime - startTime)) * 100));
+                
+                regionalReplayScrubber.value = percent;
+                regionalReplayTimeLabel.textContent = `${time.toLocaleDateString()} ${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
+            }
+        }));
+
+        scope.add(regionalReplayPlayBtn, "click", toggleReplay);
+
+        scope.add(regionalReplayJumpBtn, "click", () => {
+            if (!appState.regionalAccessDetails?.firstDetectedAccess) return;
+            const details = appState.regionalAccessDetails;
+            const firstAccess = new Date(details.firstDetectedAccess);
+            const startTime = new Date(details.baselineWindow.start).getTime();
+            const endTime = new Date(details.recentWindow.end).getTime();
+            const percent = ((firstAccess.getTime() - startTime) / (endTime - startTime)) * 100;
+            
+            regionalReplayScrubber.value = percent;
+            regionalReplayScrubber.dispatchEvent(new Event("input"));
+            setStatus(`Jumped to first detected regional access: ${firstAccess.toLocaleDateString()}`);
+        });
+
+        scope.add(exitRegionalIntelligenceBtn, "click", () => {
+            appState.regionalAccessDetails = null;
+            if (isReplaying) toggleReplay();
+            ctx.shared.clearRegionalAccessVisuals();
+            ctx.shared.clearPathEntities();
+            
+            appState.simulationMode = false;
+            appState.simulationClock = null;
+            
+            syncUI();
+            setStatus("Regional intelligence visualization cleared.");
+        });
+
         // Listen for selection changes
         scope.addCleanup(eventBus.on(events.satelliteSelected, () => {
             syncUI();
         }));
 
         scope.addCleanup(eventBus.on(events.satelliteCleared, () => {
+            syncUI();
+        }));
+
+        scope.addCleanup(eventBus.on(events.areaSelected, () => {
+            syncUI();
+        }));
+
+        scope.addCleanup(eventBus.on(events.areaCleared, () => {
             syncUI();
         }));
 
@@ -383,6 +858,9 @@ export default {
 
         return {
             unmount() {
+                if (isReplaying) toggleReplay();
+                appState.simulationMode = false;
+                appState.simulationClock = null;
                 scope.dispose();
             }
         };

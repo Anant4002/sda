@@ -50,6 +50,10 @@ test("backend blind spot analysis returns deterministic results", () => {
     assert.ok(result.regionHash);
     assert.equal(result.evaluatedSatelliteCount, 3);
     assert.equal(typeof result.hasCoverage, "boolean");
+    assert.equal(result.minimumObservationMinutes, 10);
+    assert.equal(result.requiredCoverageSamples >= 2, true);
+    assert.ok(result.debugMetrics);
+    assert.equal(typeof result.debugMetrics.averageCoverageStrength, "number");
     assert.ok(Array.isArray(result.alerts));
     assert.equal(result.alerts.length, result.hasCoverage ? 0 : 1);
 });

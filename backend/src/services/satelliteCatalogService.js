@@ -278,8 +278,28 @@ async function batchCharacteriseSatellites() {
 }
 
 async function updateSatelliteIntData(id, intData) {
-    const satellite = await Satellite.findByPk(id);
-    if (!satellite) throw new Error("Satellite not found");
+    let satellite = null;
+
+    // 1. Try finding by Primary Key if the ID is numeric
+    if (/^\d+$/.test(id)) {
+        satellite = await Satellite.findByPk(id);
+    }
+
+    // 2. Fallback to finding by name or NORAD ID if not found by PK
+    if (!satellite) {
+        satellite = await Satellite.findOne({
+            where: {
+                [Op.or]: [
+                    { name: id },
+                    { noradId: /^\d+$/.test(id) ? parseInt(id, 10) : null }
+                ].filter(c => c.name || c.noradId !== null)
+            }
+        });
+    }
+
+    if (!satellite) {
+        throw new Error(`Satellite not found with identifier: ${id}`);
+    }
 
     await satellite.update({ intData });
     clearSatelliteCatalogCache();

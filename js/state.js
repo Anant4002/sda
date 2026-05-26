@@ -15,6 +15,7 @@ export const appState = {
     satelliteMetaMap: new Map(),
     pointMap: new Map(),
     hiddenGroupLabels: new Set(),
+    hideCommercialSatellites: false,
     isTraceModeEnabled: false,
     isTracingArea: false,
     tracePoints: [],
@@ -51,5 +52,9 @@ export const appState = {
 
     // UCT & Characterisation
     uctEntities: [],
-    ucts: []
+    ucts: [],
+
+    // Emerging Regional Access
+    regionalAccessEntities: [],
+    regionalAccessDetails: null
 };

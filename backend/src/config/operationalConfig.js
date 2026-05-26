@@ -16,6 +16,7 @@ const operationalConfig = {
     // Default Thresholds
     defaultConjunctionDistanceKm: Number(process.env.DEFAULT_CONJUNCTION_DISTANCE_KM || 25),
     neighbourhoodWatchThresholdKm: Number(process.env.NEIGHBOURHOOD_WATCH_THRESHOLD_KM || 500),
+    neighbourhoodWatchWarningKm: Number(process.env.NEIGHBOURHOOD_WATCH_WARNING_KM || 250),
     neighbourhoodWatchCriticalKm: Number(process.env.NEIGHBOURHOOD_WATCH_CRITICAL_KM || 100),
     visibilityElevationDeg: Number(process.env.VISIBILITY_ELEVATION_DEG || 10),
     

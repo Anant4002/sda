@@ -20,7 +20,8 @@ const {
     runBackendConjunctionAnalysis,
     runBackendNeighbourhoodWatch,
     runBackendRegionScan,
-    runBackendBlindSpot
+    runBackendBlindSpot,
+    runBackendRegionalPresence
 } = require("../services/operationalAnalysisService");
 const { syncSatellites, fetchSatelliteCatalog } = require("../services/satelliteSyncService");
 const { Satellite } = require("../models/satellite");
@@ -86,7 +87,11 @@ router.post("/satellites/:id/int-data", requireApiKey, async (req, res) => {
         const updated = await updateSatelliteIntData(req.params.id, intData);
         res.json(updated);
     } catch (error) {
-        res.status(500).json({ error: "Unable to update INT data." });
+        console.error(`INT Data Update Failure for satellite ${req.params.id}:`, error);
+        res.status(500).json({ 
+            error: "Unable to update INT data.",
+            message: error.message
+        });
     }
 });
 
@@ -223,6 +228,8 @@ router.get("/satellites/indian", requireApiKey, validateSatelliteQuery, async (r
 router.get("/catalog/status", requireApiKey, async (req, res) => {
     try {
         const status = await getCatalogStatus();
+        const { getSchedulerStatus } = require("../services/catalogSyncScheduler");
+        status.scheduler = getSchedulerStatus();
         res.json(status);
     } catch (error) {
         res.status(500).json({ error: "Unable to load catalog status." });
@@ -562,6 +569,75 @@ router.post("/analysis/blind-spot", requireApiKey, async (req, res) => {
         });
     } catch (error) {
         return respondAnalysisFailure(res, error, "Unable to run blind spot analysis.");
+    }
+});
+
+router.post("/analysis/regional-presence/details", requireApiKey, async (req, res) => {
+    try {
+        const {
+            area,
+            region,
+            timeframeDays,
+            baselineSplitDays,
+            visibilityThresholdDeg,
+            satelliteName,
+            noradId,
+            time
+        } = req.body || {};
+
+        const { getRegionalAccessDetails } = require("../services/regionalPresenceAnalysisService");
+        
+        const result = await getRegionalAccessDetails({
+            area: area || region || null,
+            timeframeDays,
+            baselineSplitDays,
+            visibilityThresholdDeg,
+            satelliteName,
+            noradId: Number.isFinite(Number(noradId)) ? Number(noradId) : undefined,
+            time: time || new Date().toISOString()
+        });
+
+        res.json({ result });
+    } catch (error) {
+        return respondAnalysisFailure(res, error, "Unable to fetch regional presence details.");
+    }
+});
+
+router.post("/analysis/regional-presence", requireApiKey, async (req, res) => {
+    try {
+        const {
+            area,
+            region,
+            timeframeDays,
+            baselineSplitDays,
+            sampleMinutes,
+            visibilityThresholdDeg,
+            maxFindings,
+            satelliteName,
+            noradId,
+            time,
+            maxSatellites
+        } = req.body || {};
+
+        const result = await runBackendRegionalPresence({
+            area: area || region || null,
+            timeframeDays,
+            baselineSplitDays,
+            sampleMinutes,
+            visibilityThresholdDeg,
+            maxFindings,
+            satelliteName,
+            noradId: Number.isFinite(Number(noradId)) ? Number(noradId) : undefined,
+            time: time || new Date().toISOString(),
+            maxSatellites
+        });
+
+        res.json({
+            result,
+            persistedCount: 0
+        });
+    } catch (error) {
+        return respondAnalysisFailure(res, error, "Unable to run regional presence analysis.");
     }
 });
 

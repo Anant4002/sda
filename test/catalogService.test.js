@@ -8,7 +8,8 @@ const {
     getCatalogStatus,
     listCatalogEvents,
     listCatalogHistory,
-    seedCatalogHistoryIfMissing
+    seedCatalogHistoryIfMissing,
+    updateSatelliteIntData
 } = require("../backend/src/services/satelliteCatalogService");
 
 test("catalog status and history helpers return plain JSON records", async () => {
@@ -73,5 +74,51 @@ test("seedCatalogHistoryIfMissing creates a baseline snapshot when history is em
     } finally {
         await CatalogEvent.destroy({ where: {} });
         await SatelliteCatalogVersion.destroy({ where: {} });
+    }
+});
+
+test("updateSatelliteIntData finds satellite by name", async () => {
+    await sequelize.sync();
+    
+    const satName = "TEST-SAT-123 (POC)";
+    const sat = await Satellite.create({
+        name: satName,
+        line1: "1 12345U 26001A   26145.12345678  .00000000  00000-0  00000-0 0  9999",
+        line2: "2 12345  98.7654 123.4567 0001234  45.6789 314.5678 14.32109876    16",
+        noradId: 12345
+    });
+
+    try {
+        const intData = "Some intelligence data";
+        const updated = await updateSatelliteIntData(satName, intData);
+        
+        assert.equal(updated.name, satName);
+        assert.equal(updated.intData, intData);
+        
+        const reloaded = await Satellite.findByPk(sat.id);
+        assert.equal(reloaded.intData, intData);
+    } finally {
+        await sat.destroy();
+    }
+});
+
+test("updateSatelliteIntData finds satellite by numeric ID", async () => {
+    await sequelize.sync();
+    
+    const sat = await Satellite.create({
+        name: "TEST-SAT-456",
+        line1: "1 45678U 26001B   26145.12345678  .00000000  00000-0  00000-0 0  9999",
+        line2: "2 45678  98.7654 123.4567 0001234  45.6789 314.5678 14.32109876    16",
+        noradId: 45678
+    });
+
+    try {
+        const intData = "ID-based update";
+        const updated = await updateSatelliteIntData(sat.id.toString(), intData);
+        
+        assert.equal(updated.id, sat.id);
+        assert.equal(updated.intData, intData);
+    } finally {
+        await sat.destroy();
     }
 });

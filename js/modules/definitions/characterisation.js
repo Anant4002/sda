@@ -1,5 +1,5 @@
 import { setStatus } from "../../ui.js";
-import { escapeHtml, formatNumber, formatDateTime } from "../../utils.js";
+import { escapeHtml, formatNumber, formatDateTime, isCommercialSatelliteName } from "../../utils.js";
 import { ListenerScope } from "../../ui/panelSystem.js";
 import { updateIntData } from "../../catalogService.js";
 import { appState } from "../../state.js";
@@ -114,7 +114,11 @@ export default {
                 const { payload } = await fetchJsonWithFallback("/api/satellites?catalogStatus=UNCORRELATED", appState.catalogApiBaseUrl);
                 appState.ucts = payload;
 
-                const visibleUcts = payload.filter(u => !(u.name && /^TEST\b/i.test(u.name)));
+                const visibleUcts = payload.filter(u => {
+                    if (u.name && /^TEST\b/i.test(u.name)) return false;
+                    if (appState.hideCommercialSatellites && isCommercialSatelliteName(u.name)) return false;
+                    return true;
+                });
 
                 if (uctCountBadge) {
                     uctCountBadge.textContent = visibleUcts.length;
@@ -157,7 +161,11 @@ export default {
                     : `/api/satellites?limit=15`;
 
                 const { payload } = await fetchJsonWithFallback(url, appState.catalogApiBaseUrl);
-                const visible = payload.filter(s => !(s.name && /^TEST\b/i.test(s.name)));
+                const visible = payload.filter(s => {
+                    if (s.name && /^TEST\b/i.test(s.name)) return false;
+                    if (appState.hideCommercialSatellites && isCommercialSatelliteName(s.name)) return false;
+                    return true;
+                });
 
                 if (visible.length === 0) {
                     searchResults.innerHTML = '<div class="hint">No assets found.</div>';
@@ -307,7 +315,7 @@ export default {
             setStatus("Ingesting manual track observation...");
 
             try {
-                const payload = await postJsonWithFallback("/api/satellites", {
+                const { payload } = await postJsonWithFallback("/api/satellites", {
                     name: name || null,
                     line1: l1,
                     line2: l2
@@ -360,7 +368,7 @@ export default {
             setStatus(`Saving intelligence data for ${selectedSatellite.name}...`);
 
             try {
-                await updateIntData(selectedSatellite.id, newIntData);
+                await updateIntData(selectedSatellite.name, newIntData);
                 selectedSatellite.intData = newIntData;
                 const displayEl = document.getElementById("intDataDisplay");
                 if (displayEl) displayEl.textContent = newIntData || "No manual intelligence records.";

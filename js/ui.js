@@ -5,6 +5,7 @@ import {
     buildSatelliteGroups,
     computeBounds,
     escapeHtml,
+    isCommercialSatelliteName,
     safeHtml,
     formatDateTime,
     formatLatitude,
@@ -112,14 +113,44 @@ export function renderCatalogStatus(status = null, history = []) {
         const syncTime = latestVersion.syncedAt ? formatDateTime(latestVersion.syncedAt) : "Unknown";
         const freshness = formatDataAge(status.dataAgeSeconds);
         const sourceName = latestVersion.sourceName || "Unknown source";
-        const sourceUrl = latestVersion.sourceUrl || "";
+
+        let schedulerHtml = "";
+        if (status.scheduler) {
+            const nextSync = status.scheduler.nextScheduledSync ? formatDateTime(status.scheduler.nextScheduledSync) : "Unknown";
+            const schedulerState = status.scheduler.status || "Unknown";
+            
+            // Map state to CSS severity classes
+            const stateSeverityMap = {
+                HEALTHY: "success",
+                SYNCING: "info",
+                STALE: "warning",
+                DEGRADED: "warning",
+                RECOVERING: "warning",
+                FAILED: "danger"
+            };
+            const severityClass = stateSeverityMap[schedulerState] || "info";
+
+            schedulerHtml = `
+            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-color);">
+                <strong>Scheduler</strong>: <span class="badge badge-${severityClass}">${escapeHtml(schedulerState)}</span><br>
+                <strong>Next Sync</strong>: ${escapeHtml(nextSync)}
+            </div>`;
+
+            if (status.scheduler.consecutiveFailures > 0) {
+                schedulerHtml += `
+                <div style="margin-top: 4px; font-size: 0.85em; color: var(--severity-danger);">
+                    ⚠️ ${status.scheduler.consecutiveFailures} consecutive failure(s).<br>
+                    <span style="opacity: 0.8;">Reason: ${escapeHtml(status.scheduler.lastFailureReason || "Unknown Error")}</span>
+                </div>`;
+            }
+        }
 
         elements.catalogStatusSummary.innerHTML = safeHtml`
             <strong>Freshness</strong>: ${escapeHtml(freshness)} old<br>
             <strong>Records</strong>: ${formatNumber(status.currentCount || 0, 0)}<br>
             <strong>Last Sync</strong>: ${escapeHtml(syncTime)}<br>
-            <strong>Source</strong>: ${escapeHtml(sourceName)}${sourceUrl ? ` (${escapeHtml(sourceUrl)})` : ""}
-        `;
+            <strong>Source</strong>: ${escapeHtml(sourceName)}
+        ` + schedulerHtml;
     }
 
     if (!history.length) {
@@ -174,7 +205,10 @@ export function renderOperationalAlerts(alerts = []) {
 
     elements.operationalAlertSummary.textContent = `${alerts.length} operational alert${alerts.length === 1 ? "" : "s"} loaded from the backend feed.`;
     elements.operationalAlertList.innerHTML = alerts.slice(0, 5).map((alert) => {
-        const severityClass = alert.severity === "critical" ? "danger" : "warning";
+        let severityClass = "info";
+        if (alert.severity === "critical") severityClass = "danger";
+        else if (alert.severity === "warning") severityClass = "warning";
+
         const distance = Number.isFinite(alert.closestDistanceKm) ? formatNumber(alert.closestDistanceKm, 2) : "unknown";
         const relativeVelocity = Number.isFinite(alert.details?.relativeVelocityKmS)
             ? `${formatNumber(alert.details.relativeVelocityKmS, 3)} km/s`
@@ -223,7 +257,7 @@ export function updateCollisionAlert(result = null) {
 
     if (!result || !result.conjunctions || result.conjunctions.length === 0) {
         elements.collisionAlertBadge.textContent = "Clear";
-        elements.collisionAlertSummary.textContent = "Run conjunction screening to evaluate orbital close-approach risks.";
+        elements.collisionAlertSummary.textContent = "Run collision screening to evaluate orbital close-approach risks.";
         return;
     }
 
@@ -241,7 +275,7 @@ export function updateCollisionAlert(result = null) {
     const pcFormatted = Number.isFinite(top.collisionProbability) ? (top.collisionProbability < 1e-7 ? " < 1e-7" : top.collisionProbability.toExponential(2)) : "N/A";
 
     elements.collisionAlertSummary.innerHTML = safeHtml`
-        ${result.conjunctions.length} conjunction threats detected.<br>
+        ${result.conjunctions.length} collision threats detected.<br>
         Top Threat: <strong>${escapeHtml(top.primaryId)} / ${escapeHtml(top.secondaryId)}</strong><br>
         Severity: <span style="color: currentColor">${severity.toUpperCase()}</span> | Miss: ${formatNumber(top.closestDistanceKm, 2)} km | Pc: ${pcFormatted}
     `;
@@ -255,7 +289,7 @@ export function renderAreaAnalysis(result) {
     const analysisLabel = result.analysisType === "volumetric_scan" ? "Volumetric Scan" :
                           result.analysisType === "blind_spot" ? "Blind Spot Detection" :
                           result.analysisType === "conjunction_analysis" ? "Conjunction Analysis" :
-                          result.analysisType === "collision_detection" ? "High-Risk Escalation" : "Analysis";
+                          result.analysisType === "collision_detection" ? "Collision Detection" : "Analysis";
 
     // Prioritize backend-returned values to ensure sync
     const thresholdLabel = result.proximityThresholdKm || result.conjunctionThresholdKm || result.visibilityThresholdDeg || 25;
@@ -398,12 +432,12 @@ export function renderAreaAnalysis(result) {
 
         elements.analysisPanel.innerHTML = safeHtml`
             <div class="eyebrow">${escapeHtml(analysisLabel)}</div>
-            <h2>High-Risk Conjunction Escalation</h2>
-            <p>Operational escalation layer focused on national assets. Results highlight the conjunctions most likely to require command attention.</p>
+            <h2>High-Risk Collision Detection</h2>
+            <p>Operational collision detection layer focused on national assets. Results highlight the risks most likely to require command attention.</p>
 
             <div class="metric-grid">
                 <div class="metric-card">
-                    <div class="label">Critical Escalations</div>
+                    <div class="label">Critical Risks</div>
                     <div class="value">${conjunctions.filter(c => c.collisionProbability > 1e-4).length}</div>
                 </div>
                 <div class="metric-card">
@@ -417,9 +451,9 @@ export function renderAreaAnalysis(result) {
             </div>
 
             <div class="section">
-                <div class="section-title">Escalation Table</div>
+                <div class="section-title">Collision Risk Table</div>
                 <div class="list">
-                    ${markSafe(conjunctionItems || '<div class="hint">No high-risk conjunctions detected for Indian assets within the selected window.</div>')}
+                    ${markSafe(conjunctionItems || '<div class="hint">No high-risk collisions detected for Indian assets within the selected window.</div>')}
                 </div>
             </div>
         `;
@@ -918,12 +952,17 @@ export function renderSatelliteDirectory(toggleSatellitePath, hideGroup, clearHi
     if (!elements.indianSummary || !elements.indianSatList || !elements.satelliteSearchInput) {
         return;
     }
-    const groups = buildSatelliteGroups(appState.satellites);
+    const satellites = appState.hideCommercialSatellites
+        ? appState.satellites.filter((satellite) => !isCommercialSatelliteName(satellite.name))
+        : appState.satellites;
+    const groups = buildSatelliteGroups(satellites);
     const query = normalizeSearchValue(elements.satelliteSearchInput.value);
     const filteredGroups = groups.filter((group) => !query || group.label.includes(query));
     const visibleGroups = filteredGroups.slice(0, SATELLITE_FILTER_RESULT_LIMIT);
 
-    elements.indianSummary.textContent = `${groups.length} satellite groups loaded.`;
+    elements.indianSummary.textContent = appState.hideCommercialSatellites
+        ? `${groups.length} satellite groups loaded. Commercial satellites are hidden.`
+        : `${groups.length} satellite groups loaded.`;
 
     if (!filteredGroups.length) {
         elements.indianSatList.innerHTML = safeHtml`<div class="hint">No satellite names matched the current search.</div>`;

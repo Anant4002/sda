@@ -35,7 +35,10 @@ import {
     enterFocusedAnalysisMode,
     exitFocusedAnalysisMode,
     drawDriftTracks,
-    clearDriftTracks
+    clearDriftTracks,
+    drawRegionalAccessIntelligence,
+    clearRegionalAccessVisuals,
+    setInertialView
 } from "./viewer.js";
 import {
     renderCatalogStatus,
@@ -59,6 +62,7 @@ import {
     getWorldPoint,
     isTracing
 } from "./modules/regionTrace.js";
+import { isCommercialSatelliteName } from "./utils.js";
 
 const trackingWorker = new Worker("js/worker.js");
 const analysisWorker = new Worker("js/worker.js");
@@ -75,7 +79,13 @@ async function toggleSatellitePath(satelliteId) {
     if (appState.activeSatellitePathId === satelliteId) {
         appState.activeSatellitePathId = null;
         clearPathEntities();
-        renderDefaultAnalysis();
+        
+        const isOrbitModule = moduleHost.getActiveModuleId() === "orbit-propagation" || 
+                             document.getElementById("orbitActiveSelection");
+                             
+        if (isOrbitModule) {
+            renderDefaultAnalysis();
+        }
         eventBus.emit(events.satelliteCleared);
         return;
     }
@@ -105,15 +115,20 @@ function hideSatelliteGroup(label) {
     } else {
         appState.hiddenGroupLabels.add(label);
     }
+    refreshSatelliteVisibility();
+}
 
-    const satellites = appState.satellites;
-    for (const satellite of satellites) {
-        if (deriveSatelliteGroupLabel(satellite.name) === label) {
-            const point = appState.pointMap.get(satellite.name);
-            if (point) {
-                point.show = !appState.hiddenGroupLabels.has(label);
-            }
+function refreshSatelliteVisibility() {
+    for (const satellite of appState.satellites) {
+        const point = appState.pointMap.get(satellite.name);
+        if (!point) {
+            continue;
         }
+
+        const groupLabel = deriveSatelliteGroupLabel(satellite.name);
+        const isGroupHidden = appState.hiddenGroupLabels.has(groupLabel);
+        const isCommercialHidden = appState.hideCommercialSatellites && isCommercialSatelliteName(satellite.name);
+        point.show = !isGroupHidden && !isCommercialHidden;
     }
 
     renderSatelliteDirectory(toggleSatellitePath, hideSatelliteGroup, clearHiddenGroups);
@@ -121,10 +136,7 @@ function hideSatelliteGroup(label) {
 
 function clearHiddenGroups() {
     appState.hiddenGroupLabels.clear();
-    for (const point of appState.pointMap.values()) {
-        point.show = true;
-    }
-    renderSatelliteDirectory(toggleSatellitePath, hideSatelliteGroup, clearHiddenGroups);
+    refreshSatelliteVisibility();
 }
 
 async function refreshCatalogSidebar() {
@@ -180,6 +192,7 @@ async function initializeApplication() {
                 toggleSatellitePath,
                 hideSatelliteGroup,
                 clearHiddenGroups,
+                refreshSatelliteVisibility,
                 refreshCatalogSidebar,
 
                 resetRealTimeClock: () => {
@@ -195,6 +208,9 @@ async function initializeApplication() {
                 clearPathEntities,
                 drawDriftTracks,
                 drawPredictedPaths,
+                drawRegionalAccessIntelligence,
+                clearRegionalAccessVisuals,
+                setInertialView,
                 focusOnSatellite: async (id) => {
                     // Try to find in existing catalog first
                     let meta = appState.satelliteMetaMap.get(id);
@@ -220,6 +236,9 @@ async function initializeApplication() {
                 // State Accessors
                 get catalogStatusSnapshot() {
                     return catalogStatusSnapshot ? { status: catalogStatusSnapshot, history: catalogHistorySnapshot } : null;
+                },
+                get alertsSnapshot() {
+                    return alertsSnapshot;
                 }
             }
         });
@@ -302,7 +321,16 @@ async function initializeApplication() {
             } else if (event.data.type === "satellitePath") {
                 const paths = Array.isArray(event.data.result) ? event.data.result : [event.data.result];
                 drawPredictedPaths(paths);
-                renderSatellitePath(paths[0]); // Use first segment for metadata summary
+                
+                // Only show the metadata panel if the Orbit Propagation module is active
+                // We check both the active module ID and the presence of a module-specific sidebar element for robustness.
+                const isOrbitModule = moduleHost.getActiveModuleId() === "orbit-propagation" || 
+                                     document.getElementById("orbitActiveSelection");
+                
+                if (isOrbitModule) {
+                    renderSatellitePath(paths[0]);
+                }
+                
                 setStatus(`Orbit rendered for ${paths[0].id}`);
             }
         };
@@ -326,6 +354,10 @@ async function initializeApplication() {
                 if (!appState.realTimeClock) appState.realTimeClock = new Date();
                 const multiplier = appState.realTimeMultiplier !== undefined ? appState.realTimeMultiplier : 1;
                 appState.realTimeClock = new Date(appState.realTimeClock.getTime() + elapsedRealMs * multiplier);
+            } else if (!appState.simulationPaused) {
+                if (!appState.simulationClock) appState.simulationClock = new Date();
+                const speed = appState.simulationSpeed || 1;
+                appState.simulationClock = new Date(appState.simulationClock.getTime() + elapsedRealMs * speed);
             }
 
             const simTime = appState.simulationMode && appState.simulationClock
@@ -338,6 +370,8 @@ async function initializeApplication() {
             const julian = Cesium.JulianDate.fromDate(simTime);
             viewer.clock.currentTime = julian;
             viewer.scene.requestRender();
+
+            eventBus.emit(events.CLOCK_UPDATED, { time: simTime, julian });
 
             // Only post to worker if it's ready and not currently processing
             if (appState.trackingWorkerReady && !appState.workerUpdateInFlight) {
@@ -436,8 +470,10 @@ async function initializeApplication() {
 
             const pickedObject = viewer.scene.pick(click.position);
             if (Cesium.defined(pickedObject) && pickedObject.primitive instanceof Cesium.PointPrimitive) {
-                const satelliteId = pickedObject.id;
-                toggleSatellitePath(satelliteId);
+                const id = pickedObject.id;
+                if (typeof id === "string") {
+                    toggleSatellitePath(id);
+                }
             } else {
                 // Clicked on empty space, clear selection if not tracing
                 if (appState.activeSatellitePathId || appState.selectedArea) {
@@ -522,7 +558,7 @@ async function populateSatelliteScene(satellites) {
         for (const satellite of batch) {
             appState.satelliteMetaMap.set(satellite.name, satellite);
             const groupLabel = deriveSatelliteGroupLabel(satellite.name);
-            const isHidden = appState.hiddenGroupLabels.has(groupLabel);
+            const isHidden = appState.hiddenGroupLabels.has(groupLabel) || (appState.hideCommercialSatellites && isCommercialSatelliteName(satellite.name));
 
             const point = satellitePoints.add({
                 pixelSize: satellite.isIndian ? 6.5 : 5,

@@ -36,6 +36,23 @@ export async function fetchBackendBlindSpot(payload, apiBaseUrl = null) {
     };
 }
 
+export async function fetchBackendRegionalPresence(payload, apiBaseUrl = null) {
+    const { apiBaseUrl: resolvedApiBaseUrl, payload: responsePayload } = await postJsonWithFallback("/api/analysis/regional-presence", payload, apiBaseUrl);
+    return {
+        apiBaseUrl: resolvedApiBaseUrl,
+        result: responsePayload.result,
+        persistedCount: responsePayload.persistedCount || 0
+    };
+}
+
+export async function fetchBackendRegionalPresenceDetails(payload, apiBaseUrl = null) {
+    const { apiBaseUrl: resolvedApiBaseUrl, payload: responsePayload } = await postJsonWithFallback("/api/analysis/regional-presence/details", payload, apiBaseUrl);
+    return {
+        apiBaseUrl: resolvedApiBaseUrl,
+        result: responsePayload.result
+    };
+}
+
 export async function fetchBackendManoeuvreDetection(payload = {}, apiBaseUrl = null) {
     try {
         const { apiBaseUrl: resolvedApiBaseUrl, payload: responsePayload } = await postJsonWithFallback("/api/analysis/manoeuvre-detection", payload, apiBaseUrl);

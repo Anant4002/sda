@@ -1,6 +1,11 @@
 const crypto = require("node:crypto");
 const { OperationalAlert } = require("../models/operationalAlert");
 
+const {
+    neighbourhoodWatchWarningKm: NEIGHBOURHOOD_WATCH_WARNING_KM,
+    neighbourhoodWatchCriticalKm: NEIGHBOURHOOD_WATCH_CRITICAL_KM
+} = require("../config/operationalConfig").operationalConfig;
+
 const DEFAULT_ALERT_LIMIT = 20;
 const MAX_ALERT_LIMIT = 100;
 
@@ -17,7 +22,7 @@ function normalizeLimit(limit, fallback = DEFAULT_ALERT_LIMIT) {
     return Math.min(parsedLimit, MAX_ALERT_LIMIT);
 }
 
-function classifySeverity(alert, thresholdKm) {
+function classifySeverity(alertType, alert, thresholdKm) {
     const closestDistanceKm = alert.closestDistanceKm;
     const collisionProbability = alert.collisionProbability;
 
@@ -27,14 +32,28 @@ function classifySeverity(alert, thresholdKm) {
     }
 
     if (!Number.isFinite(closestDistanceKm)) {
-        return "warning";
+        return "info";
     }
 
-    if (closestDistanceKm <= Math.max(5, thresholdKm * 0.35)) {
+    if (alertType === "conjunction") {
+        if (closestDistanceKm <= 10) {
+            return "critical";
+        }
+        if (closestDistanceKm <= thresholdKm) {
+            return "warning";
+        }
+        return "info";
+    }
+
+    if (closestDistanceKm <= NEIGHBOURHOOD_WATCH_CRITICAL_KM) {
         return "critical";
     }
 
-    return "warning";
+    if (closestDistanceKm <= NEIGHBOURHOOD_WATCH_WARNING_KM) {
+        return "warning";
+    }
+
+    return "info";
 }
 
 function buildEventKey(alertType, alert, context) {
@@ -135,7 +154,7 @@ async function persistAlertBatch(alertType, alerts, context = {}) {
             analysisKey: alert.analysisKey || context.analysisKey || ""
         }),
         alertType,
-        severity: alert.severity || classifySeverity(alert, thresholdKm || 0),
+        severity: alert.severity || classifySeverity(alertType, alert, thresholdKm || 0),
         title: alert.title || buildAlertTitle(alertType, alert),
         message: alert.message || buildAlertMessage(alertType, alert, thresholdKm || 0),
         primaryId: alert.primaryId,

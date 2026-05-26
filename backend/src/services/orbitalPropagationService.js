@@ -218,7 +218,8 @@ function propagateState(record, date, observer = null, fixedGmst = null) {
         lat: satellite.degreesLat(geodetic.latitude),
         lon: satellite.degreesLong(geodetic.longitude),
         altKm: geodetic.height,
-        elevationDeg: lookAngles ? toDegrees(lookAngles.elevation) : -90
+        elevationDeg: lookAngles ? toDegrees(lookAngles.elevation) : -90,
+        rangeKm: lookAngles ? lookAngles.rangeSat : null
     };
 }
 

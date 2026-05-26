@@ -1,5 +1,9 @@
 import { fetchBackendNeighbourhoodWatch } from "../../analysisService.js";
-import { NEIGHBOURHOOD_WATCH_THRESHOLD_KM } from "../../config.js";
+import { 
+    NEIGHBOURHOOD_WATCH_THRESHOLD_KM,
+    NEIGHBOURHOOD_WATCH_WARNING_KM,
+    NEIGHBOURHOOD_WATCH_CRITICAL_KM
+} from "../../config.js";
 import { appState } from "../../state.js";
 import { setStatus } from "../../ui.js";
 import { escapeHtml, formatDateTime, formatNumber } from "../../utils.js";
@@ -8,8 +12,8 @@ import { eventBus, events } from "../eventBus.js";
 import { drawProximityAlerts, clearProximityAlerts } from "../../viewer.js";
 
 const THRESHOLD_OPTIONS = [
-    { value: "50", label: "50 km" },
-    { value: "250", label: "250 km" },
+    { value: "100", label: "100 km (Critical Only)" },
+    { value: "250", label: "250 km (Warning Only)" },
     { value: "500", label: "500 km", selected: true },
     { value: "1000", label: "1000 km" },
     { value: "2000", label: "2000 km" }
@@ -29,7 +33,19 @@ function buildSidebar() {
                 </div>
             </div>
             ${field("Proximity Threshold", selectControl("neighbourhoodThresholdSelect", THRESHOLD_OPTIONS), { id: "neighbourhoodThresholdSelect" })}
-            <button id="neighbourhoodWatchRunButton" type="button">Execute Neighbourhood Watch</button>
+            <div class="micro-card" style="margin-top: 8px; font-size: 11px; line-height: 1.4;">
+                <div style="margin-bottom: 4px;"><strong>Severity Criteria:</strong></div>
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 2px;">
+                    <span class="badge badge-danger" style="min-width: 60px;">Critical</span> <span>&lt; ${NEIGHBOURHOOD_WATCH_CRITICAL_KM} km</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 2px;">
+                    <span class="badge badge-warning" style="min-width: 60px;">Warning</span> <span>&lt; ${NEIGHBOURHOOD_WATCH_WARNING_KM} km</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span class="badge badge-info" style="min-width: 60px;">Routine</span> <span>&lt; ${NEIGHBOURHOOD_WATCH_THRESHOLD_KM} km</span>
+                </div>
+            </div>
+            <button id="neighbourhoodWatchRunButton" type="button" style="margin-top: 12px;">Execute Neighbourhood Watch</button>
         </div>
         <div class="section">
             <div class="section-title">Proximity Event Log</div>
@@ -74,12 +90,25 @@ function renderResult(result) {
 
     // Sortable-like list (already sorted by distance from backend)
     list.innerHTML = result.alerts.map((alert) => {
-        const severityClass = alert.severity === "critical" ? "danger" : "warning";
+        let severityClass = "info";
+        let badgeClass = "badge-info";
+        let label = "ROUTINE";
+
+        if (alert.severity === "critical") {
+            severityClass = "danger";
+            badgeClass = "badge-danger";
+            label = "CRITICAL";
+        } else if (alert.severity === "warning") {
+            severityClass = "warning";
+            badgeClass = "badge-warning";
+            label = "WARNING";
+        }
+
         return `
             <div class="list-item ${severityClass}">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                     <strong>${escapeHtml(alert.primaryId)} ↔ ${escapeHtml(alert.secondaryId)}</strong>
-                    <span class="badge ${alert.severity === "critical" ? "badge-danger" : "badge-warning"}">${alert.severity.toUpperCase()}</span>
+                    <span class="badge ${badgeClass}">${label}</span>
                 </div>
                 <div style="font-size: 0.9em; margin-top: 5px; color: var(--text-dim);">
                     Distance: <strong>${formatNumber(alert.closestDistanceKm, 2)} km</strong><br>

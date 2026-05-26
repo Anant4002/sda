@@ -7,6 +7,7 @@ const {
 
 const {
     neighbourhoodWatchThresholdKm: NEIGHBOURHOOD_WATCH_THRESHOLD_KM,
+    neighbourhoodWatchWarningKm: NEIGHBOURHOOD_WATCH_WARNING_KM,
     neighbourhoodWatchCriticalKm: NEIGHBOURHOOD_WATCH_CRITICAL_KM,
     maxNeighbourhoodResults: MAX_NEIGHBOURHOOD_RESULTS
 } = operationalConfig;
@@ -66,13 +67,20 @@ function analyzeNeighbourhoodWatchFromRecords(records, satelliteId, startTime, t
                 ? Math.sqrt(dx * dx + dy * dy + dz * dz)
                 : null;
 
+            let severity = "info";
+            if (distanceKm <= operationalConfig.neighbourhoodWatchCriticalKm) {
+                severity = "critical";
+            } else if (distanceKm <= operationalConfig.neighbourhoodWatchWarningKm) {
+                severity = "warning";
+            }
+
             alerts.push({
                 primaryId: primaryRecord.id,
                 secondaryId: nearbyRecord.id,
                 closestDistanceKm: distanceKm,
                 relativeVelocityKmS,
                 time: startDate.toISOString(),
-                severity: distanceKm <= NEIGHBOURHOOD_WATCH_CRITICAL_KM ? "critical" : "warning",
+                severity,
                 // Include positions for globe markers
                 primaryPos: primaryState.ecf,
                 secondaryPos: nearbyState.ecf

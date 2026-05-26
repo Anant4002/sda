@@ -12,6 +12,10 @@ const {
     buildRegionHash, 
     closestPointDistanceKm 
 } = require("./propagationCoordinator");
+const {
+    isEffectivelyCovered,
+    resolveSensorProfile
+} = require("../../../shared/blindSpotCoverageUtils");
 
 const {
     analysisStepSeconds: ANALYSIS_STEP_SECONDS,
@@ -20,6 +24,7 @@ const {
     indianSatellitePathColor: INDIAN_SATELLITE_PATH_COLOR,
     visibilityElevationDeg: VISIBILITY_ELEVATION_DEG
 } = operationalConfig;
+const BLIND_SPOT_SAMPLE_SECONDS = Math.max(60, Math.min(ANALYSIS_STEP_SECONDS, 300));
 
 /**
  * Scans for all satellite passes and close approaches within a defined 3D volumetric region.
@@ -199,6 +204,21 @@ function analyzeBlindSpotFromRecords(records, area, startTime, horizonMinutes, m
         latitude: toRadians(centroid.lat),
         height: 0
     };
+    const minimumObservationMinutes = 10;
+    const requiredCoverageSamples = Math.max(1, Math.ceil(minimumObservationMinutes * 60 / BLIND_SPOT_SAMPLE_SECONDS));
+    const debugMetrics = {
+        totalEvaluations: 0,
+        visibleCount: 0,
+        effectiveCoverageCount: 0,
+        rejectedByRange: 0,
+        rejectedByOffNadir: 0,
+        rejectedByElevation: 0,
+        rejectedByThreshold: 0,
+        coverageStrengthSum: 0,
+        coverageStrengthMin: Number.POSITIVE_INFINITY,
+        coverageStrengthMax: 0,
+        profileUsageCounts: {}
+    };
 
     // Performance Optimization: Pre-calculate Area Bounding Box
     let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
@@ -216,8 +236,10 @@ function analyzeBlindSpotFromRecords(records, area, startTime, horizonMinutes, m
         assertAnalysisWithinDeadline(deadlineMs, "Blind spot analysis", analysisTimeoutMs);
         evaluatedSatelliteCount += 1;
         let satelliteHasCoverage = false;
+        let coverageStreak = 0;
+        const profile = resolveSensorProfile(record.id || record.noradId || "");
 
-        for (let offsetSeconds = 0; offsetSeconds <= horizonMinutes * 60; offsetSeconds += ANALYSIS_STEP_SECONDS) {
+        for (let offsetSeconds = 0; offsetSeconds <= horizonMinutes * 60; offsetSeconds += BLIND_SPOT_SAMPLE_SECONDS) {
             assertAnalysisWithinDeadline(deadlineMs, "Blind spot analysis", analysisTimeoutMs);
             const sampleDate = new Date(startDate.getTime() + offsetSeconds * 1000);
             const state = propagateState(record, sampleDate, observer);
@@ -230,17 +252,52 @@ function analyzeBlindSpotFromRecords(records, area, startTime, horizonMinutes, m
                                 state.lon >= minLon && state.lon <= maxLon;
             
             const isInsideArea = altitudeInRange && isWithinBBox && pointInPolygon({ lat: state.lat, lon: state.lon }, area.points);
-            const isVisible = state.elevationDeg >= thresholdDeg;
 
-            if (isInsideArea && isVisible) {
-                satelliteHasCoverage = true;
-                hasCoverage = true;
-                break;
+            if (!isInsideArea) {
+                coverageStreak = 0;
+                continue;
             }
-        }
 
-        if (satelliteHasCoverage) {
-            break;
+            const coverage = isEffectivelyCovered({
+                elevationDeg: state.elevationDeg,
+                rangeKm: state.rangeKm,
+                profile,
+                minElevationDeg: Math.max(profile.minElevationDeg, thresholdDeg)
+            });
+
+            debugMetrics.totalEvaluations += 1;
+            debugMetrics.profileUsageCounts[profile.key] = (debugMetrics.profileUsageCounts[profile.key] || 0) + 1;
+            debugMetrics.coverageStrengthSum += coverage.coverageStrength || 0;
+            debugMetrics.coverageStrengthMin = Math.min(debugMetrics.coverageStrengthMin, coverage.coverageStrength || 0);
+            debugMetrics.coverageStrengthMax = Math.max(debugMetrics.coverageStrengthMax, coverage.coverageStrength || 0);
+            if (coverage.isGeometricallyVisible) {
+                debugMetrics.visibleCount += 1;
+            }
+            if (coverage.isEffectivelyCovered) {
+                debugMetrics.effectiveCoverageCount += 1;
+            }
+            if (coverage.rejectedByRange) {
+                debugMetrics.rejectedByRange += 1;
+            }
+            if (coverage.rejectedByOffNadir) {
+                debugMetrics.rejectedByOffNadir += 1;
+            }
+            if (coverage.rejectedByElevation) {
+                debugMetrics.rejectedByElevation += 1;
+            }
+            if (coverage.rejectedByThreshold) {
+                debugMetrics.rejectedByThreshold += 1;
+            }
+
+            if (coverage.isEffectivelyCovered) {
+                coverageStreak += 1;
+                if (coverageStreak >= requiredCoverageSamples) {
+                    satelliteHasCoverage = true;
+                    hasCoverage = true;
+                }
+            } else {
+                coverageStreak = 0;
+            }
         }
     }
 
@@ -266,9 +323,22 @@ function analyzeBlindSpotFromRecords(records, area, startTime, horizonMinutes, m
         minAltitudeKm: altitudeWindow.minAltitudeKm,
         maxAltitudeKm: altitudeWindow.maxAltitudeKm,
         visibilityThresholdDeg: thresholdDeg,
-        sampleSeconds: ANALYSIS_STEP_SECONDS,
+        minimumObservationMinutes,
+        requiredCoverageSamples,
+        sampleSeconds: BLIND_SPOT_SAMPLE_SECONDS,
         evaluatedSatelliteCount,
         hasCoverage,
+        debugMetrics: {
+            ...debugMetrics,
+            coveragePassRate: debugMetrics.totalEvaluations > 0
+                ? debugMetrics.effectiveCoverageCount / debugMetrics.totalEvaluations
+                : 0,
+            averageCoverageStrength: debugMetrics.totalEvaluations > 0
+                ? debugMetrics.coverageStrengthSum / debugMetrics.totalEvaluations
+                : 0,
+            coverageStrengthMin: Number.isFinite(debugMetrics.coverageStrengthMin) ? debugMetrics.coverageStrengthMin : 0,
+            coverageStrengthMax: Number.isFinite(debugMetrics.coverageStrengthMax) ? debugMetrics.coverageStrengthMax : 0
+        },
         alerts
     };
 }

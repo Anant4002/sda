@@ -9,7 +9,11 @@ export async function fetchJsonWithFallback(path, preferredApiBaseUrl = null, fa
 
     for (const baseUrl of baseUrls) {
         try {
-            const response = await fetch(`${baseUrl}${path}`);
+            const response = await fetch(`${baseUrl}${path}`, {
+                headers: {
+                    "x-api-key": ""
+                }
+            });
             if (!response.ok) {
                 let errorDetails = "";
                 try {
