@@ -103,9 +103,8 @@ function buildSidebar() {
             <div id="bsScheduleContainer" class="list" style="max-height: 250px; overflow-y: auto;">
                 <div class="empty-state">Select a region to compute schedule.</div>
             </div>
-            <div style="display:flex; gap:4px; margin-top:8px;">
-                <button id="bsExportCsvBtn" class="secondary" style="flex:1; font-size:11px;">Export CSV</button>
-                <button id="bsExportJsonBtn" class="secondary" style="flex:1; font-size:11px;">Export JSON</button>
+            <div style="margin-top:8px;">
+                <button id="bsExportCsvBtn" class="secondary" style="width:100%; font-size:11px;">Export CSV</button>
             </div>
         </div>
     `;
@@ -378,25 +377,25 @@ function getRegionIntersectionFactor(lookLat, lookLon, radiusKm, focusedSite) {
         if (d <= radiusKm) return 1.0;
         return Math.max(0.0, Math.min(1.0, 1.0 - (d - radiusKm) / (radiusKm * 1.5)));
     }
-    
+
     if (appState.selectedArea && Array.isArray(appState.selectedArea.points)) {
         const isInside = pointInPolygon({ lat: lookLat, lon: lookLon }, appState.selectedArea.points);
         if (isInside) return 1.0;
-        
+
         let minD = Number.MAX_VALUE;
         appState.selectedArea.points.forEach(p => {
             const dist = haversineKm(lookLat, lookLon, p.lat, p.lon);
             if (dist < minD) minD = dist;
         });
-        
+
         if (minD <= radiusKm) {
             return 0.7; // Partially overlapping the region boundary
         }
-        
+
         const decay = Math.exp(-0.02 * (minD - radiusKm));
-        return Math.max(0.01, Math.min(0.2, decay * 0.2)); 
+        return Math.max(0.01, Math.min(0.2, decay * 0.2));
     }
-    
+
     return 1.0;
 }
 
@@ -552,7 +551,7 @@ function updateSiteVisuals(clock, satrecs, viewer, focusedSite, sensorConeAngleD
             ageMinutes = (clock.getTime() - state.lastObservedTime) / 60000;
             if (ageMinutes <= 30) {
                 currentStrength = state.baseStrength * Math.exp(-0.05 * ageMinutes);
-                
+
                 if (ageMinutes <= 10) {
                     coverageStatus = "strong";
                 } else {
@@ -699,8 +698,8 @@ function updateSiteVisuals(clock, satrecs, viewer, focusedSite, sensorConeAngleD
         }
 
         // 7. Render site as a clean, high-value strategic tactical node beacon circle
-        const beaconRadiusMeters = 40000; 
-        
+        const beaconRadiusMeters = 40000;
+
         let labelText = site.name.toUpperCase();
         if (hasBlindSpots) {
             labelText += `\n[SENSOR BLIND SPOT]`;
@@ -1072,7 +1071,7 @@ function updateTracedAreaVisual(clock, satrecs, viewer, focusedSite, sensorConeA
         if (gridEntities.length === 0) {
             appState.selectedArea.grid.forEach((pt, gridIdx) => {
                 const covResult = evaluateCoverageAtPoint(pt.lat, pt.lon, clock, satrecs, sensorConeAngleDeg);
-                
+
                 // Temporal decay logic for each grid point
                 let gState = gridObservationState.get(gridIdx);
                 if (!gState) {
@@ -1103,7 +1102,7 @@ function updateTracedAreaVisual(clock, satrecs, viewer, focusedSite, sensorConeA
                 const e = viewer.entities.add({
                     position: Cesium.Cartesian3.fromDegrees(pt.lon, pt.lat),
                     ellipse: {
-                        semiMinorAxis: 15000, 
+                        semiMinorAxis: 15000,
                         semiMajorAxis: 15000,
                         material: ptColor,
                         outline: gridStatus !== "blind",
@@ -1368,12 +1367,6 @@ function renderSchedule(scheduleContainer, schedule) {
                 <div>Avg Dark: <strong style="color: white;">${debugMetrics.averageDarkDurationMinutes.toFixed(0)}m</strong></div>
                 <div>ISR Contrib.: <strong style="color: #4fc3f7;">${debugMetrics.isrContributionCount || 0}</strong></div>
                 <div>GEO-Only Contrib.: <strong style="color: #ff8a65;">${debugMetrics.geoContributionCount || 0}</strong></div>
-                <div>Sample Points: <strong style="color: white;">${debugMetrics.samplePointCount || 1}</strong></div>
-                <div>Cov. Fraction Req.: <strong style="color: white;">${((debugMetrics.coverageFractionRequired || 1) * 100).toFixed(0)}%</strong></div>
-                <div>Range Rej.: <strong style="color: white;">${debugMetrics.rejectedByRange}</strong></div>
-                <div>Off-Nadir Rej.: <strong style="color: white;">${debugMetrics.rejectedByOffNadir}</strong></div>
-                <div>Threshold Rej.: <strong style="color: white;">${debugMetrics.rejectedByThreshold}</strong></div>
-                <div>Profiles: <strong style="color: white;">${Object.entries(debugMetrics.profileUsageCounts).map(([k,v]) => `${k}:${v}`).join(", ") || "n/a"}</strong></div>
             </div>
         </div>
     ` : "";
@@ -1483,7 +1476,7 @@ export default {
         const searchBtn = document.getElementById("bsSearchBtn");
         const dateDisplay = document.getElementById("bsCurrentDateDisplay");
         const exportCsvBtn = document.getElementById("bsExportCsvBtn");
-        const exportJsonBtn = document.getElementById("bsExportJsonBtn");
+
 
         const siteButtons = document.querySelectorAll(".site-btn");
         const cbGroup = document.querySelectorAll(".sat-group-cb");

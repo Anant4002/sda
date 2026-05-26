@@ -38,7 +38,8 @@ import {
     clearDriftTracks,
     drawRegionalAccessIntelligence,
     clearRegionalAccessVisuals,
-    setInertialView
+    setInertialView,
+    toggleGlobeRotation
 } from "./viewer.js";
 import {
     renderCatalogStatus,
@@ -453,6 +454,12 @@ async function initializeApplication() {
             elements.moduleDockToggle.addEventListener("click", () => {
                 elements.moduleDockContainer.classList.toggle("collapsed");
                 elements.moduleDockToggle.textContent = elements.moduleDockContainer.classList.contains("collapsed") ? "Show Dock" : "Hide Dock";
+            });
+        }
+
+        if (elements.globeRotationToggle) {
+            elements.globeRotationToggle.addEventListener("click", () => {
+                toggleGlobeRotation();
             });
         }
 

@@ -46,6 +46,7 @@ export const appState = {
 
     // Visualisation Modes
     isInertialViewEnabled: true,
+    isGlobeRotationEnabled: false,
 
     // Re-entry Analysis
     reentryEntities: [],
@@ -56,5 +57,8 @@ export const appState = {
 
     // Emerging Regional Access
     regionalAccessEntities: [],
-    regionalAccessDetails: null
+    regionalAccessDetails: null,
+
+    // Rapid Threat Ingestion
+    rapidEntities: []
 };

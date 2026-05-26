@@ -209,21 +209,67 @@ export function renderOperationalAlerts(alerts = []) {
         if (alert.severity === "critical") severityClass = "danger";
         else if (alert.severity === "warning") severityClass = "warning";
 
-        const distance = Number.isFinite(alert.closestDistanceKm) ? formatNumber(alert.closestDistanceKm, 2) : "unknown";
-        const relativeVelocity = Number.isFinite(alert.details?.relativeVelocityKmS)
-            ? `${formatNumber(alert.details.relativeVelocityKmS, 3)} km/s`
-            : "unknown";
-        const altitude = Number.isFinite(alert.details?.altitudeKm)
-            ? `${formatNumber(alert.details.altitudeKm, 0)} km`
-            : "unknown";
-        const occurredAt = alert.occurredAt ? formatDateTime(alert.occurredAt) : "Unknown time";
+        let idLine = "";
+        const primary = alert.primaryId && alert.primaryId !== "N/A" ? alert.primaryId : null;
+        const secondary = alert.secondaryId && alert.secondaryId !== "N/A" ? alert.secondaryId : null;
+        if (primary && secondary) {
+            idLine = `${escapeHtml(primary)} / ${escapeHtml(secondary)}`;
+        } else if (primary) {
+            idLine = escapeHtml(primary);
+        } else if (secondary) {
+            idLine = escapeHtml(secondary);
+        }
+
+        const parts = [];
+        
+        let distanceVal = alert.closestDistanceKm;
+        if (!Number.isFinite(distanceVal)) {
+            const risks = alert.details?.rawAlert?.details?.strategicRisks || alert.details?.strategicRisks;
+            if (Array.isArray(risks) && risks.length > 0) {
+                const dists = risks.map(r => r.distanceKm).filter(Number.isFinite);
+                if (dists.length > 0) {
+                    distanceVal = Math.min(...dists);
+                }
+            }
+        }
+        if (Number.isFinite(distanceVal)) {
+            parts.push(`Distance: ${formatNumber(distanceVal, 2)} km`);
+        }
+
+        let altitudeVal = alert.details?.altitudeKm;
+        if (altitudeVal === undefined || altitudeVal === null) {
+            altitudeVal = alert.details?.currentAltitudeKm;
+        }
+        if (altitudeVal === undefined || altitudeVal === null) {
+            altitudeVal = alert.details?.rawAlert?.details?.currentAltitudeKm;
+        }
+        if (altitudeVal === undefined || altitudeVal === null) {
+            altitudeVal = alert.details?.rawAlert?.details?.altitudeKm;
+        }
+        if (Number.isFinite(altitudeVal)) {
+            parts.push(`Altitude: ${formatNumber(altitudeVal, 0)} km`);
+        }
+
+        let relativeVelocityVal = alert.details?.relativeVelocityKmS;
+        if (relativeVelocityVal === undefined || relativeVelocityVal === null) {
+            relativeVelocityVal = alert.details?.rawAlert?.details?.relativeVelocityKmS;
+        }
+        if (Number.isFinite(relativeVelocityVal)) {
+            parts.push(`Relative velocity: ${formatNumber(relativeVelocityVal, 3)} km/s`);
+        }
+
+        if (alert.occurredAt) {
+            parts.push(`Time: ${formatDateTime(alert.occurredAt)}`);
+        }
+
+        const metricsLine = parts.join(" | ");
 
         return `
             <div class="list-item ${severityClass}">
                 <strong>${escapeHtml(alert.title || "Operational Alert")}</strong>
                 ${escapeHtml(alert.message || "No message available.")}<br>
-                ${escapeHtml(alert.primaryId || "N/A")} / ${escapeHtml(alert.secondaryId || "N/A")}<br>
-                Distance: ${escapeHtml(distance)} km | Altitude: ${escapeHtml(altitude)} | Relative velocity: ${escapeHtml(relativeVelocity)} | Time: ${escapeHtml(occurredAt)}
+                ${idLine ? `${idLine}<br>` : ""}
+                ${escapeHtml(metricsLine)}
             </div>
         `;
     }).join("");

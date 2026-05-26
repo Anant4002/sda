@@ -893,9 +893,21 @@ export function setInertialView(enabled) {
     setStatus("Orbit view locked to inertial tracking mode.");
 }
 
+export function toggleGlobeRotation() {
+    appState.isGlobeRotationEnabled = !appState.isGlobeRotationEnabled;
+    const btn = document.getElementById("globeRotationToggle");
+    if (btn) {
+        btn.classList.toggle("is-active", appState.isGlobeRotationEnabled);
+    }
+    setStatus(appState.isGlobeRotationEnabled ? "Globe rotation enabled." : "Globe rotation disabled.");
+}
+
 // Why: keep user camera controls smooth; orbit geometry already updates in the chosen frame without forcing the camera transform every frame.
-viewer.scene.postRender.addEventListener(() => {
-    return;
+viewer.scene.postUpdate.addEventListener((scene, time) => {
+    if (appState.isGlobeRotationEnabled && !appState.isFocusMode) {
+        // Simple rotation around Z axis for visual effect
+        viewer.camera.rotate(Cesium.Cartesian3.UNIT_Z, 0.0007);
+    }
 });
 
 export function drawPredictedPaths(paths) {
@@ -1057,6 +1069,10 @@ export function drawReentrySimulation(data) {
 export function drawRapidTrack(track) {
     if (!track || !track.trajectory) return;
 
+    if (!appState.rapidEntities) {
+        appState.rapidEntities = [];
+    }
+
     const color = track.threatLevel === "CRITICAL" ? Cesium.Color.RED :
                   track.threatLevel === "WARNING" ? Cesium.Color.ORANGE :
                   track.type === "Meteor" ? Cesium.Color.CYAN : Cesium.Color.WHITE;
@@ -1087,10 +1103,12 @@ export function drawRapidTrack(track) {
             disableDepthTestDistance: Number.POSITIVE_INFINITY
         }
     });
+    appState.rapidEntities.push(entity);
 
     // If impact point predicted, show it
     if (track.impactPoint) {
-        viewer.entities.add({
+        const impactEntity = viewer.entities.add({
+            name: `Impact Point: ${track.id}`,
             position: Cesium.Cartesian3.fromDegrees(track.impactPoint.lon, track.impactPoint.lat, 0),
             point: {
                 pixelSize: 10,
@@ -1106,14 +1124,26 @@ export function drawRapidTrack(track) {
                 outlineColor: color
             }
         });
+        appState.rapidEntities.push(impactEntity);
     }
 
     return entity;
 }
 
 export function clearRapidTracks() {
-    // Basic cleanup - in a real app we'd track these in an array
-    viewer.entities.values.filter(e => e.name && (e.name.includes("Ballistic") || e.name.includes("Hypersonic") || e.name.includes("Meteor"))).forEach(e => viewer.entities.remove(e));
+    if (appState.rapidEntities) {
+        appState.rapidEntities.forEach(e => viewer.entities.remove(e));
+        appState.rapidEntities = [];
+    }
+    // Keyword fallback cleanup for safety
+    viewer.entities.values.filter(e => e.name && (
+        e.name.includes("Ballistic") || 
+        e.name.includes("Hypersonic") || 
+        e.name.includes("Meteor") || 
+        e.name.includes("Debris") || 
+        e.name.includes("Orbital Object") ||
+        e.name.includes("Impact Point")
+    )).forEach(e => viewer.entities.remove(e));
 }
 
 export function clearRegionalAccessVisuals() {
@@ -1129,7 +1159,7 @@ export function renderOperationalSwath(satelliteId, profile, time) {
 
     const cartographic = Cesium.Cartographic.fromCartesian(point.position);
     const altitudeKm = cartographic.height / 1000;
-    
+
     // We assume the satellite is looking at its nadir for the swath visualization
     // In a real SDA system, this would use actual sensor pointing.
     const radiusKm = computeOperationalRadiusKm({
@@ -1160,7 +1190,7 @@ export function drawRegionalAccessIntelligence(details) {
         { ...details.oldOrbit, width: 3, style: "dotted" },
         { ...details.newOrbit, width: 5, color: mainColor.toCssColorString() }
     ]);
-    // Note: drawPredictedPaths adds to appState.pathEntities, which is fine, 
+    // Note: drawPredictedPaths adds to appState.pathEntities, which is fine,
     // but we might want them in regionalAccessEntities for combined cleanup.
     appState.regionalAccessEntities.push(...appState.pathEntities);
 
@@ -1201,8 +1231,8 @@ export function drawRegionalAccessIntelligence(details) {
             }
         }
 
-        const firstAccessPos = (closestSample && closestSample.lat !== undefined) 
-            ? Cesium.Cartesian3.fromDegrees(closestSample.lon, closestSample.lat, (closestSample.altKm || 400) * 1000) 
+        const firstAccessPos = (closestSample && closestSample.lat !== undefined)
+            ? Cesium.Cartesian3.fromDegrees(closestSample.lon, closestSample.lat, (closestSample.altKm || 400) * 1000)
             : (closestSample ? new Cesium.Cartesian3(closestSample.x * 1000, closestSample.y * 1000, closestSample.z * 1000) : null);
 
         if (firstAccessPos) {

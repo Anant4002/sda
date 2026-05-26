@@ -38,5 +38,6 @@ export const elements = {
     get indianSatList() { return $id("indianSatList"); },
     get satelliteSearchInput() { return $id("satelliteSearchInput"); },
     get hiddenGroupsSummary() { return $id("hiddenGroupsSummary"); },
-    get resetHiddenGroupsButton() { return $id("resetHiddenGroupsButton"); }
+    get resetHiddenGroupsButton() { return $id("resetHiddenGroupsButton"); },
+    get globeRotationToggle() { return $id("globeRotationToggle"); }
 };

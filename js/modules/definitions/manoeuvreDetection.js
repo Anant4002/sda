@@ -3,8 +3,7 @@ import { setStatus } from "../../ui.js";
 import { escapeHtml } from "../../utils.js";
 import { 
     fetchBackendManoeuvreDetection, 
-    fetchBackendRegionalPresence, 
-    fetchBackendRegionalPresenceDetails 
+    fetchBackendRegionalPresence
 } from "../../analysisService.js";
 import { ListenerScope } from "../../ui/panelSystem.js";
 import { eventBus, events } from "../eventBus.js";
@@ -117,14 +116,6 @@ function renderRegionalPresenceFinding(finding) {
                 <div style="color: var(--text-dim);">First Access: <span style="color: var(--text-main);">${formatTimestamp(finding.firstDetectedAccess)}</span></div>
             </div>
 
-            <div style="margin-top: 10px; display: flex; gap: 8px;">
-                <button class="visualize-finding-btn secondary tiny" 
-                        data-sat="${escapeHtml(finding.satelliteName)}" 
-                        data-norad="${finding.noradId || ""}"
-                        style="width: 100%;">
-                    Visualize Intelligence
-                </button>
-            </div>
         </div>
     `;
 }
@@ -232,42 +223,6 @@ function buildSidebar() {
             </div>
 
             <div id="regionalPresenceResults" class="list" style="margin-top: 12px;"></div>
-
-            <div id="regionalIntelligenceControls" style="display: none; margin-top: 12px;">
-                <div class="section-title">Timeline Replay</div>
-                <div class="micro-card" style="margin-bottom: 12px; border-left: 2px solid var(--text-accent);">
-                    <div id="replaySatLabel" style="font-weight: bold; color: var(--text-bright); margin-bottom: 4px;"></div>
-                    <div style="font-size: 0.8em; color: var(--text-dim); margin-bottom: 8px;">Scrub to replay 30-day orbital evolution and regional access emergence.</div>
-                    
-                    <input type="range" id="regionalReplayScrubber" min="0" max="100" value="0" style="width: 100%; margin-bottom: 8px;">
-                    
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <span id="regionalReplayTimeLabel" style="font-family: var(--font-mono); font-size: 0.75em; color: var(--text-main);">01 May 2026</span>
-                        <button id="regionalReplayJumpBtn" class="secondary tiny">Jump to First Access</button>
-                    </div>
-
-                    <button id="regionalReplayPlayBtn" class="primary tiny" style="width: 100%; margin-bottom: 12px;">Play Evolution</button>
-
-                    <div id="regionalIntelligenceLegend" class="micro-card" style="font-size: 0.8em; background: rgba(0,0,0,0.2);">
-                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-                            <div style="width: 12px; height: 2px; border: 1px dashed #99b7c8;"></div>
-                            <span>Dotted: Baseline (Old Window)</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-                            <div id="newOrbitLegendColor" style="width: 12px; height: 3px; background: var(--text-accent);"></div>
-                            <span>Solid: Emerging (New Window)</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                            <div style="width: 12px; height: 4px; background: rgba(255,255,255,0.8); border: 1px solid white;"></div>
-                            <span>Dot: Point of First Regional Access</span>
-                        </div>
-                        <div style="font-size: 0.85em; color: var(--text-dim); border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px;">
-                            Note: "Access" indicates the satellite was in the sky above the region (e.g. >10° elevation), not necessarily passing directly overhead.
-                        </div>
-                    </div>
-                </div>
-                <button id="exitRegionalIntelligenceBtn" class="secondary" style="width: 100%;">Clear Visualization</button>
-            </div>
         </div>
     `;
 }
@@ -367,17 +322,7 @@ export default {
         const regionalPresenceSummary = document.getElementById("regionalPresenceSummary");
         const regionalPresenceSummaryContent = document.getElementById("regionalPresenceSummaryContent");
         const regionalPresenceResults = document.getElementById("regionalPresenceResults");
-        const regionalIntelligenceControls = document.getElementById("regionalIntelligenceControls");
-        const replaySatLabel = document.getElementById("replaySatLabel");
-        const regionalReplayScrubber = document.getElementById("regionalReplayScrubber");
-        const regionalReplayTimeLabel = document.getElementById("regionalReplayTimeLabel");
-        const regionalReplayPlayBtn = document.getElementById("regionalReplayPlayBtn");
-        const regionalReplayJumpBtn = document.getElementById("regionalReplayJumpBtn");
-        const exitRegionalIntelligenceBtn = document.getElementById("exitRegionalIntelligenceBtn");
-
         let regionalPresenceSelectionTouched = false;
-        let isReplaying = false;
-        let replayTimer = null;
 
         const scope = new ListenerScope();
 
@@ -531,35 +476,6 @@ export default {
                 manoeuvreEventLog.style.display = "none";
             }
 
-            if (appState.regionalAccessDetails) {
-                regionalIntelligenceControls.style.display = "block";
-                replaySatLabel.textContent = appState.regionalAccessDetails.satelliteName;
-                const details = appState.regionalAccessDetails;
-                const startTime = new Date(details.baselineWindow.start).getTime();
-                const endTime = new Date(details.recentWindow.end).getTime();
-                const currentTime = Cesium.JulianDate.toDate(ctx.shared.viewer.clock.currentTime).getTime();
-                const percent = Math.max(0, Math.min(100, ((currentTime - startTime) / (endTime - startTime)) * 100));
-                
-                regionalReplayScrubber.value = percent;
-                
-                // Format date and time for better precision during replay
-                const dateObj = new Date(currentTime);
-                regionalReplayTimeLabel.textContent = `${dateObj.toLocaleDateString()} ${dateObj.getHours().toString().padStart(2, '0')}:${dateObj.getMinutes().toString().padStart(2, '0')}`;
-
-                // Sync legend color
-                const severityColors = {
-                    high: "#ff4d4d", // CSS equivalents of Cesium colors
-                    medium: "#ffa500",
-                    low: "#ffff00"
-                };
-                const legendColor = document.getElementById("newOrbitLegendColor");
-                if (legendColor) {
-                    legendColor.style.backgroundColor = severityColors[details.operationalSeverity] || "#00ffff";
-                }
-            } else {
-                regionalIntelligenceControls.style.display = "none";
-            }
-
             if (regionalPresenceRegionSelect) {
                 if (!regionalPresenceSelectionTouched && appState.selectedArea) {
                     regionalPresenceRegionSelect.value = "current";
@@ -631,126 +547,6 @@ export default {
                 `;
                 setStatus(`Regional presence analysis failed for ${selectedArea.name || "selected region"}.`);
             }
-        });
-
-        // Listen for visualize clicks in the results list (event delegation)
-        scope.add(regionalPresenceResults, "click", async (e) => {
-            const btn = e.target.closest(".visualize-finding-btn");
-            if (!btn) return;
-
-            const satName = btn.dataset.sat;
-            const noradId = btn.dataset.norad;
-            const regionKey = regionalPresenceRegionSelect?.value || "delhi";
-            const selectedArea = resolveRegionalPresenceArea(regionKey);
-            const timeframeDays = Number.parseInt(regionalPresenceWindowSelect?.value || "30", 10) || 30;
-
-            setStatus(`Fetching orbital intelligence details for ${satName}...`);
-            
-            try {
-                const currentTime = appState.simulationMode && appState.simulationClock
-                    ? appState.simulationClock
-                    : Cesium.JulianDate.toDate(ctx.shared.viewer.clock.currentTime);
-
-                const { result } = await fetchBackendRegionalPresenceDetails({
-                    area: selectedArea,
-                    timeframeDays,
-                    satelliteName: satName,
-                    noradId: noradId ? Number(noradId) : undefined,
-                    time: currentTime.toISOString()
-                }, appState.catalogApiBaseUrl);
-
-                appState.regionalAccessDetails = result;
-                
-                // Set clock to beginning of analysis window for replay
-                const startJulian = Cesium.JulianDate.fromIso8601(result.baselineWindow.start);
-                appState.simulationMode = true;
-                appState.simulationClock = Cesium.JulianDate.toDate(startJulian);
-                
-                ctx.shared.viewer.clock.currentTime = startJulian;
-                ctx.shared.viewer.clock.shouldAnimate = false;
-
-                ctx.shared.drawRegionalAccessIntelligence(result);
-                syncUI();
-                setStatus(`Intelligence visualization active for ${satName}.`);
-            } catch (error) {
-                console.error("Failed to fetch regional access details:", error);
-                setStatus(`Failed to load intelligence details for ${satName}.`);
-            }
-        });
-
-        scope.add(regionalReplayScrubber, "input", () => {
-            if (!appState.regionalAccessDetails) return;
-            const details = appState.regionalAccessDetails;
-            const startTime = new Date(details.baselineWindow.start).getTime();
-            const endTime = new Date(details.recentWindow.end).getTime();
-            const targetTime = startTime + (endTime - startTime) * (regionalReplayScrubber.value / 100);
-            
-            const date = new Date(targetTime);
-            appState.simulationClock = date;
-            ctx.shared.viewer.clock.currentTime = Cesium.JulianDate.fromDate(date);
-            regionalReplayTimeLabel.textContent = `${date.toLocaleDateString()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-        });
-
-        const toggleReplay = () => {
-            isReplaying = !isReplaying;
-            regionalReplayPlayBtn.textContent = isReplaying ? "Pause Evolution" : "Play Evolution";
-            
-            if (isReplaying) {
-                appState.simulationPaused = true; // Use our own interval for precise % control
-                replayTimer = setInterval(() => {
-                    let val = parseInt(regionalReplayScrubber.value);
-                    if (val >= 100) {
-                        toggleReplay();
-                        return;
-                    }
-                    val += 1;
-                    regionalReplayScrubber.value = val;
-                    regionalReplayScrubber.dispatchEvent(new Event("input"));
-                }, 100);
-            } else {
-                if (replayTimer) clearInterval(replayTimer);
-            }
-        };
-
-        scope.addCleanup(eventBus.on(events.CLOCK_UPDATED, ({ time }) => {
-            if (appState.regionalAccessDetails && !isReplaying) {
-                const details = appState.regionalAccessDetails;
-                const startTime = new Date(details.baselineWindow.start).getTime();
-                const endTime = new Date(details.recentWindow.end).getTime();
-                const currentTime = time.getTime();
-                const percent = Math.max(0, Math.min(100, ((currentTime - startTime) / (endTime - startTime)) * 100));
-                
-                regionalReplayScrubber.value = percent;
-                regionalReplayTimeLabel.textContent = `${time.toLocaleDateString()} ${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
-            }
-        }));
-
-        scope.add(regionalReplayPlayBtn, "click", toggleReplay);
-
-        scope.add(regionalReplayJumpBtn, "click", () => {
-            if (!appState.regionalAccessDetails?.firstDetectedAccess) return;
-            const details = appState.regionalAccessDetails;
-            const firstAccess = new Date(details.firstDetectedAccess);
-            const startTime = new Date(details.baselineWindow.start).getTime();
-            const endTime = new Date(details.recentWindow.end).getTime();
-            const percent = ((firstAccess.getTime() - startTime) / (endTime - startTime)) * 100;
-            
-            regionalReplayScrubber.value = percent;
-            regionalReplayScrubber.dispatchEvent(new Event("input"));
-            setStatus(`Jumped to first detected regional access: ${firstAccess.toLocaleDateString()}`);
-        });
-
-        scope.add(exitRegionalIntelligenceBtn, "click", () => {
-            appState.regionalAccessDetails = null;
-            if (isReplaying) toggleReplay();
-            ctx.shared.clearRegionalAccessVisuals();
-            ctx.shared.clearPathEntities();
-            
-            appState.simulationMode = false;
-            appState.simulationClock = null;
-            
-            syncUI();
-            setStatus("Regional intelligence visualization cleared.");
         });
 
         // Listen for selection changes

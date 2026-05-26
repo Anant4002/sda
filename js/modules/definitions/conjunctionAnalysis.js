@@ -142,8 +142,6 @@ function handleConjunctionClick(idx, ctx) {
     if (!conj) return;
 
     setStatus(`Analyzing engagement geometry: ${conj.primaryId} ↔ ${conj.secondaryId}`);
-
-    setStatus(`Analyzing engagement geometry: ${conj.primaryId} -> ${conj.secondaryId}`);
     drawConjunctionEvent(conj);
 
     // Jump clock to TCA - 1 minute to show animation

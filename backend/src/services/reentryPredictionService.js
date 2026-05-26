@@ -175,7 +175,9 @@ async function predictSatelliteReentry(noradId, satelliteName, options = {}) {
         await recordOperationalAlert({
             title: "Re-entry Priority Alert",
             severity: prediction.strategicRisks.length > 0 ? "critical" : "warning",
-            message: `${satelliteName} re-entry corridor passes over ${prediction.strategicRisks.map(r => r.name).join(", ")}.`,
+            message: prediction.strategicRisks.length > 0
+                ? `${satelliteName} re-entry corridor passes over ${prediction.strategicRisks.map(r => r.name).join(", ")}.`
+                : `${satelliteName} re-entry corridor is clear of strategic installations.`,
             primaryId: satelliteName,
             occurredAt: new Date().toISOString(),
             details: prediction
