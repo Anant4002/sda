@@ -237,6 +237,8 @@ function evaluateCoverageAtPoint(lat, lon, date, satrecs, elevationThresholdDeg 
             rangeKm,
             altKm,
             profile,
+            date,
+            name: sat.name,
             minElevationDeg: Math.max(profile.minElevationDeg, elevationThresholdDeg)
         });
 
@@ -795,6 +797,8 @@ function updateTracedAreaVisual(clock, satrecs, viewer, focusedSite, sensorConeA
                 rangeKm,
                 altKm,
                 profile,
+                date: clock,
+                name: sat.name,
                 minElevationDeg: Math.max(profile.minElevationDeg, sensorConeAngleDeg)
             });
 
@@ -1366,7 +1370,6 @@ function renderSchedule(scheduleContainer, schedule) {
                 <div>Max Dark: <strong style="color: white;">${debugMetrics.maxDarkDurationMinutes.toFixed(0)}m</strong></div>
                 <div>Avg Dark: <strong style="color: white;">${debugMetrics.averageDarkDurationMinutes.toFixed(0)}m</strong></div>
                 <div>ISR Contrib.: <strong style="color: #4fc3f7;">${debugMetrics.isrContributionCount || 0}</strong></div>
-                <div>GEO-Only Contrib.: <strong style="color: #ff8a65;">${debugMetrics.geoContributionCount || 0}</strong></div>
             </div>
         </div>
     ` : "";
@@ -1706,6 +1709,56 @@ export default {
         });
 
         scope.add(searchBtn, "click", performSearch);
+
+        scope.add(exportCsvBtn, "click", () => {
+            if (!lastBlindSpotSchedule || lastBlindSpotSchedule.length === 0) {
+                setStatus("Please select a region and generate a schedule before exporting.");
+                return;
+            }
+
+            const activeTargetName = lastActiveTarget ? lastActiveTarget.name : "Traced Region";
+            const coverageGroups = SATELLITE_GROUPS.filter(g => g.selected).map(g => g.label).join("; ");
+
+            // Build CSV content
+            let csvRows = [];
+            csvRows.push("Strategic Region,Start Time (UTC),End Time (UTC),Start Time (IST),End Time (IST),Duration (Minutes),Coverage Set");
+
+            const istOffset = 5.5 * 60 * 60 * 1000;
+
+            lastBlindSpotSchedule.forEach(bs => {
+                const startUTC = bs.start.toISOString();
+                const endUTC = bs.end.toISOString();
+
+                const startIST = new Date(bs.start.getTime() + istOffset).toISOString().substr(11, 8);
+                const endIST = new Date(bs.end.getTime() + istOffset).toISOString().substr(11, 8);
+
+                const row = [
+                    `"${activeTargetName.replace(/"/g, '""')}"`,
+                    `"${startUTC}"`,
+                    `"${endUTC}"`,
+                    `"${startIST}"`,
+                    `"${endIST}"`,
+                    bs.duration,
+                    `"${coverageGroups.replace(/"/g, '""')}"`
+                ].join(",");
+
+                csvRows.push(row);
+            });
+
+            const csvString = csvRows.join("\r\n");
+            const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `Blind_Spot_Schedule_${activeTargetName.replace(/[^a-zA-Z0-9]/g, "_")}.csv`);
+            link.style.visibility = "hidden";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            setStatus("CSV schedule exported successfully.");
+        });
 
         const playBtn = document.getElementById("bsPlayPauseBtn");
         const fastBtn = document.getElementById("bsFastBtn");

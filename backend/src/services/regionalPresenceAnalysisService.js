@@ -150,6 +150,8 @@ function computePointAccess(record, date, point, visibilityThresholdDeg, depende
         elevationDeg: propagated.elevationDeg,
         rangeKm: propagated.rangeKm,
         profile,
+        date,
+        name: record?.satelliteName || record?.name || record?.id || record,
         minElevationDeg: Math.max(profile.minElevationDeg, visibilityThresholdDeg)
     });
 

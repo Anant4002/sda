@@ -279,6 +279,8 @@ function analyzeBlindSpotFromRecords(records, area, startTime, horizonMinutes, m
                 rangeKm: state.rangeKm,
                 altKm: state.altKm,
                 profile,
+                date: sampleDate,
+                name: record.name,
                 minElevationDeg: Math.max(profile.minElevationDeg, thresholdDeg)
             });
 

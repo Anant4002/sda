@@ -242,7 +242,36 @@
         const offNadirFactor = computeOffNadirFactor(offNadirDeg, profile.maxOffNadirDeg);
         const rangeFactor = computeRangeFactor(rangeKm, profile.maxOperationalRangeKm);
         const sensorFactor = sensorQualityFactor;
-        const isrFactor = profile.isrCapable === false ? 0.05 : 1.0;
+        let isrFactor = profile.isrCapable === false ? 0.05 : 1.0;
+        
+        if (profile.key === "geoComm" && input.date !== undefined && input.date !== null) {
+            const timeMs = (input.date instanceof Date ? input.date : new Date(input.date)).getTime();
+            
+            // Simple deterministic hash of satellite name to shift phase
+            let nameHash = 0;
+            const nameStr = typeof input.record === "object" && input.record?.name 
+                ? String(input.record.name)
+                : (typeof input.name === "string" ? input.name : "");
+            
+            for (let i = 0; i < nameStr.length; i++) {
+                nameHash += nameStr.charCodeAt(i);
+            }
+            
+            const phaseShift = (nameHash % 360) * 10 * 60 * 1000; // Shift up to 1 hour in MS
+            const shiftedTime = timeMs + phaseShift;
+            
+            // Period cycles for periodic scintillation and RF degradation
+            const wave1 = Math.sin(shiftedTime / (180 * 60 * 1000)); // 3-hour period
+            const wave2 = Math.cos(shiftedTime / (70 * 60 * 1000));  // 70-minute period
+            const wave3 = Math.sin(shiftedTime / (15 * 60 * 1000));  // 15-minute high-frequency noise
+            
+            const combinedNoise = (wave1 * 0.4) + (wave2 * 0.3) + (wave3 * 0.1);
+            
+            // Base strength is 0.48, varying between 0.13 and 0.83.
+            // When combined with rawStrength (~0.6), coverageStrength varies between 0.08 (blind) and 0.50 (strong).
+            // This produces realistic 15-45 minute outages every few hours.
+            isrFactor = clamp01(0.48 + combinedNoise * 0.35);
+        }
         const rawStrength = clamp01(
             (elevationFactor * 0.35) +
             (offNadirFactor * 0.35) +

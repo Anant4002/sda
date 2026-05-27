@@ -906,7 +906,7 @@ export function toggleGlobeRotation() {
 viewer.scene.postUpdate.addEventListener((scene, time) => {
     if (appState.isGlobeRotationEnabled && !appState.isFocusMode) {
         // Simple rotation around Z axis for visual effect
-        viewer.camera.rotate(Cesium.Cartesian3.UNIT_Z, 0.0007);
+        viewer.camera.rotate(Cesium.Cartesian3.UNIT_Z, 0.0004);
     }
 });
 
@@ -1137,10 +1137,10 @@ export function clearRapidTracks() {
     }
     // Keyword fallback cleanup for safety
     viewer.entities.values.filter(e => e.name && (
-        e.name.includes("Ballistic") || 
-        e.name.includes("Hypersonic") || 
-        e.name.includes("Meteor") || 
-        e.name.includes("Debris") || 
+        e.name.includes("Ballistic") ||
+        e.name.includes("Hypersonic") ||
+        e.name.includes("Meteor") ||
+        e.name.includes("Debris") ||
         e.name.includes("Orbital Object") ||
         e.name.includes("Impact Point")
     )).forEach(e => viewer.entities.remove(e));
