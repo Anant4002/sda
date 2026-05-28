@@ -94,7 +94,7 @@ export function buildSatelliteGroups(satellites) {
     });
 }
 
-const COMMERCIAL_SATELLITE_NAME_REGEX = /PLANET|MAXAR|BLACKSKY|WORLDVIEW|SKYSAT|FLOCK|STARLINK|ONEWEB|KUIPER|DIGUI/i;
+const COMMERCIAL_SATELLITE_NAME_REGEX = /STARLINK|ONEWEB|KUIPER|DIGUI/i;
 
 export function isCommercialSatelliteName(name) {
     return COMMERCIAL_SATELLITE_NAME_REGEX.test(String(name || ""));

@@ -47,7 +47,7 @@ function buildSidebar() {
                 Hide commercial satellites
             </label>
             <div class="micro-card" style="font-size: 0.82em; margin-bottom: 8px;">
-                Filters commercial TLE entries such as Starlink, OneWeb, Kuiper, Digui, Planet, Maxar, BlackSky, WorldView, SkySat, and Flock from the catalog view and globe.
+                Filters commercial TLE entries such as Starlink, OneWeb, Kuiper and Digui from the catalog view and globe.
             </div>
             <button id="resetHiddenGroupsButton" class="secondary" type="button" disabled>Show All Hidden Groups</button>
             <div id="hiddenGroupsSummary" class="micro-card">No satellite name groups are hidden.</div>
@@ -94,7 +94,7 @@ export default {
 
         const searchInput = document.getElementById("satelliteSearchInput");
         const hideCommercialToggle = document.getElementById("hideCommercialToggle");
-        
+
         scope.add(searchInput, "input", refreshDirectory);
         scope.add(hideCommercialToggle, "change", () => {
             appState.hideCommercialSatellites = Boolean(hideCommercialToggle.checked);
