@@ -8,7 +8,7 @@ import {
 import { ListenerScope } from "../../ui/panelSystem.js";
 import { eventBus, events } from "../eventBus.js";
 import { elements } from "../../dom.js";
-import { updateSelectedAreaVisual } from "../../viewer.js";
+import { enterAreaFocusMode, exitAreaFocusMode, updateSelectedAreaVisual } from "../../viewer.js";
 
 function generateCirclePoints(centroid, radiusKm) {
     const points = [];
@@ -311,6 +311,10 @@ export default {
         });
 
         scope.add(regionalPresenceRunButton, "click", async () => {
+            if (appState.analysisInFlight) {
+                setStatus("Error: An analysis is already in progress.");
+                return;
+            }
             const selectedArea = appState.selectedArea;
             const timeframeDays = Number.parseInt(regionalPresenceWindowSelect?.value || "30", 10) || 30;
 
@@ -319,6 +323,7 @@ export default {
                 return;
             }
 
+            appState.analysisInFlight = true;
             setStatus(`Analyzing emerging regional access for ${selectedArea.name || "selected region"} over ${timeframeDays} days...`);
             renderAnalysisLoader("Emerging Regional Access", "Screening historical pass windows and visibility scores...");
 
@@ -344,6 +349,8 @@ export default {
                 if (elements.analysisPanel) {
                     elements.analysisPanel.innerHTML = `<div class="list-item danger"><strong>Error:</strong> Regional presence analysis failed for ${escapeHtml(selectedArea.name || "selected region")}.</div>`;
                 }
+            } finally {
+                appState.analysisInFlight = false;
             }
         });
 
@@ -365,9 +372,14 @@ export default {
         }));
 
         scope.add(document.getElementById("driftRunButton"), "click", async () => {
+            if (appState.analysisInFlight) {
+                setStatus("Error: An analysis is already in progress.");
+                return;
+            }
             const satelliteId = appState.activeSatellitePathId;
             if (!satelliteId) return;
 
+            appState.analysisInFlight = true;
             const days = document.getElementById("driftDurationSelect").value;
             setStatus(`Computing ${days}-day orbital drift evolution for ${satelliteId}...`);
             renderAnalysisLoader("Orbital Drift Analysis", "Simulating historical trajectories and overlaying drift rings...");
@@ -402,6 +414,8 @@ export default {
                 if (elements.analysisPanel) {
                     elements.analysisPanel.innerHTML = `<div class="list-item danger"><strong>Error:</strong> Drift analysis failed for ${escapeHtml(satelliteId)}.</div>`;
                 }
+            } finally {
+                appState.analysisInFlight = false;
             }
         });
 
@@ -414,9 +428,14 @@ export default {
         });
 
         scope.add(manoeuvreAnalyzeButton, "click", async () => {
+            if (appState.analysisInFlight) {
+                setStatus("Error: An analysis is already in progress.");
+                return;
+            }
             const satelliteId = appState.activeSatellitePathId;
             if (!satelliteId) return;
 
+            appState.analysisInFlight = true;
             setStatus(`Analyzing manoeuvre signature for ${satelliteId}...`);
             renderAnalysisLoader("Manoeuvre Signature Analysis", "Comparing predicted trajectory with telemetry revisions...");
 
@@ -453,6 +472,8 @@ export default {
                 if (elements.analysisPanel) {
                     elements.analysisPanel.innerHTML = `<div class="list-item danger"><strong>Error:</strong> Manoeuvre analysis failed for ${escapeHtml(satelliteId)}.</div>`;
                 }
+            } finally {
+                appState.analysisInFlight = false;
             }
         });
 
@@ -493,6 +514,7 @@ export default {
 
             // Draw boundary outline on Cesium map
             updateSelectedAreaVisual(appState.selectedArea);
+            enterAreaFocusMode([]);
 
             // Camera flyTo bounding box
             ctx.shared.viewer.camera.flyTo({
@@ -569,6 +591,7 @@ export default {
         return {
             unmount() {
                 updateSelectedAreaVisual(null);
+                exitAreaFocusMode();
                 scope.dispose();
             }
         };

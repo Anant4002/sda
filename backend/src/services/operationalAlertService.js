@@ -1,5 +1,6 @@
 const crypto = require("node:crypto");
 const { OperationalAlert } = require("../models/operationalAlert");
+let correlationEngineService = null;
 
 const {
     neighbourhoodWatchWarningKm: NEIGHBOURHOOD_WATCH_WARNING_KM,
@@ -56,6 +57,147 @@ function classifySeverity(alertType, alert, thresholdKm) {
     return "info";
 }
 
+function toPositiveFiniteNumber(value) {
+    if (value === undefined || value === null || value === "") {
+        return null;
+    }
+
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+        return null;
+    }
+
+    return parsed;
+}
+
+function pickFirstText(...values) {
+    for (const value of values) {
+        if (value === undefined || value === null) {
+            continue;
+        }
+        const text = String(value).trim();
+        if (text) {
+            return text;
+        }
+    }
+    return null;
+}
+
+function buildObjectLabel(name, noradId, cosparId) {
+    const cleanName = pickFirstText(name);
+    if (cleanName) {
+        return cleanName;
+    }
+
+    const parsedNorad = toPositiveFiniteNumber(noradId);
+    if (parsedNorad !== null) {
+        return `NORAD ID ${parsedNorad}`;
+    }
+
+    const cleanCospar = pickFirstText(cosparId);
+    if (cleanCospar) {
+        return `COSPAR ID ${cleanCospar}`;
+    }
+
+    return null;
+}
+
+function buildAlertDetails(alertType, alert, context, analysisTime) {
+    const primaryObjectName = pickFirstText(
+        alert.primaryObjectName,
+        alert.primaryName,
+        alert.satelliteName,
+        alert.primaryId
+    );
+    const secondaryObjectName = pickFirstText(
+        alert.secondaryObjectName,
+        alert.secondaryName,
+        alert.secondaryId
+    );
+    const primaryNoradId = toPositiveFiniteNumber(alert.primaryNoradId ?? alert.noradId ?? alert.primaryNorad);
+    const secondaryNoradId = toPositiveFiniteNumber(alert.secondaryNoradId ?? alert.secondaryNorad);
+    const primaryCosparId = pickFirstText(alert.primaryCosparId, alert.primaryCospar);
+    const secondaryCosparId = pickFirstText(alert.secondaryCosparId, alert.secondaryCospar);
+
+    const details = {
+        analysisTime,
+        area: context.area || null,
+        sampleSeconds: context.sampleSeconds || null,
+        altitudeRangeKm: context.altitudeRangeKm || null,
+        primaryObjectName,
+        secondaryObjectName,
+        primaryNoradId,
+        secondaryNoradId,
+        primaryCosparId,
+        secondaryCosparId,
+        relativeVelocityKmS: alert.relativeVelocityKmS ?? null,
+        collisionProbability: alert.collisionProbability ?? null,
+        altitudeKm: alert.altitudeKm ?? null,
+        classification: alert.classification || null,
+        orbitalElementDelta: alert.orbitalElementDelta || alert.deltaOrbitalParameters || null,
+        deltaOrbitalParameters: alert.deltaOrbitalParameters || alert.orbitalElementDelta || null,
+        epochResidualKm: alert.epochResidualKm ?? null,
+        proximityBeforeKm: alert.minDistanceBeforeKm ?? null,
+        proximityAfterKm: alert.minDistanceAfterKm ?? null,
+        previousTle: alert.previousTle || null,
+        newTle: alert.newTle || null,
+        tca: alert.tca || alert.time || null,
+        missDistanceKm: alert.missDistanceKm ?? alert.closestDistanceKm ?? null,
+        closestDistanceKm: alert.closestDistanceKm ?? null,
+        observationWindow: alert.observationWindow || null,
+        region: alert.region || null,
+        regionHash: alert.regionHash || null,
+        regionName: alert.regionName || null,
+        startTime: alert.startTime || null,
+        endTime: alert.endTime || null,
+        durationMinutes: alert.durationMinutes ?? null,
+        reentryWindow: alert.reentryWindow || null,
+        impactCorridor: alert.impactCorridor || null,
+        riskLevel: alert.riskLevel || null,
+        confidence: alert.confidence ?? null,
+        strategicRisks: alert.strategicRisks || null,
+        indiaSpecificRisk: alert.indiaSpecificRisk || null,
+        rawAlert: alert
+    };
+
+    if (alertType === "neighbourhood_watch") {
+        details.observationWindow = alert.observationWindow || {
+            start: alert.time || analysisTime,
+            end: alert.time || analysisTime
+        };
+    }
+
+    if (alertType === "blind_spot") {
+        details.region = alert.region || context.area || null;
+        details.regionHash = alert.regionHash || context.analysisKey || null;
+        details.regionName = alert.regionName || (context.area && context.area.name) || null;
+    }
+
+    if (alertType === "manoeuvre") {
+        details.satelliteName = alert.satelliteName || primaryObjectName || null;
+        details.primaryObjectName = alert.satelliteName || primaryObjectName || null;
+        details.confidence = alert.confidence ?? details.confidence;
+    }
+
+    if (alertType === "reentry") {
+        details.satelliteName = alert.satelliteName || primaryObjectName || null;
+        details.primaryObjectName = alert.satelliteName || primaryObjectName || null;
+        details.primaryNoradId = primaryNoradId ?? null;
+        details.predictedReentryDate = alert.estimatedReentryDate || alert.predictedReentryDate || null;
+    }
+
+    if (alertType === "conjunction") {
+        details.primaryName = primaryObjectName;
+        details.secondaryName = secondaryObjectName;
+        details.primaryNoradId = primaryNoradId;
+        details.secondaryNoradId = secondaryNoradId;
+        details.tca = alert.tca || alert.time || analysisTime;
+        details.missDistanceKm = alert.missDistanceKm ?? alert.closestDistanceKm ?? null;
+    }
+
+    return details;
+}
+
 function buildEventKey(alertType, alert, context) {
     const hash = crypto.createHash("sha256");
     hash.update([
@@ -74,11 +216,11 @@ function buildEventKey(alertType, alert, context) {
 
 function buildAlertTitle(alertType, alert) {
     if (alertType === "neighbourhood_watch") {
-        return `Neighbourhood watch: ${alert.primaryId} / ${alert.secondaryId}`;
+        return `Neighbourhood watch: ${buildObjectLabel(alert.primaryName || alert.primaryObjectName || alert.primaryId, alert.primaryNoradId, alert.primaryCosparId) || "Monitored Asset"} / ${buildObjectLabel(alert.secondaryName || alert.secondaryObjectName || alert.secondaryId, alert.secondaryNoradId, alert.secondaryCosparId) || "Nearby Object"}`;
     }
 
     if (alertType === "volumetric_scan") {
-        return `Region scan: ${alert.primaryId}`;
+        return `Region scan: ${buildObjectLabel(alert.primaryName || alert.primaryObjectName || alert.primaryId, alert.primaryNoradId, alert.primaryCosparId) || "Region scan"}`;
     }
 
     if (alertType === "blind_spot") {
@@ -86,10 +228,14 @@ function buildAlertTitle(alertType, alert) {
     }
 
     if (alertType === "manoeuvre") {
-        return `Manoeuvre: ${alert.primaryId} (${alert.classification || "unknown"})`;
+        return `Manoeuvre: ${buildObjectLabel(alert.satelliteName || alert.primaryName || alert.primaryId, alert.primaryNoradId, alert.primaryCosparId) || "Satellite"} (${alert.classification || "unknown"})`;
     }
 
-    return `Conjunction: ${alert.primaryId} / ${alert.secondaryId}`;
+    if (alertType === "reentry") {
+        return `Re-entry: ${buildObjectLabel(alert.primaryObjectName || alert.satelliteName || alert.primaryId, alert.primaryNoradId, alert.primaryCosparId) || "Satellite"}`;
+    }
+
+    return `Conjunction: ${buildObjectLabel(alert.primaryName || alert.primaryObjectName || alert.primaryId, alert.primaryNoradId, alert.primaryCosparId) || "Primary"} / ${buildObjectLabel(alert.secondaryName || alert.secondaryObjectName || alert.secondaryId, alert.secondaryNoradId, alert.secondaryCosparId) || "Secondary"}`;
 }
 
 function buildAlertMessage(alertType, alert, thresholdKm) {
@@ -146,7 +292,20 @@ async function persistAlertBatch(alertType, alerts, context = {}) {
 
     const analysisTime = context.analysisTime || new Date().toISOString();
 
-    const payloads = alerts.map(alert => ({
+    const payloads = alerts.map(alert => {
+        const details = buildAlertDetails(alertType, alert, context, analysisTime);
+        const primaryDisplay = buildObjectLabel(
+            details.primaryObjectName,
+            details.primaryNoradId,
+            details.primaryCosparId
+        ) || buildObjectLabel(alert.primaryId, alert.primaryNoradId, alert.primaryCosparId);
+        const secondaryDisplay = buildObjectLabel(
+            details.secondaryObjectName,
+            details.secondaryNoradId,
+            details.secondaryCosparId
+        ) || buildObjectLabel(alert.secondaryId, alert.secondaryNoradId, alert.secondaryCosparId);
+
+        return {
         eventKey: buildEventKey(alertType, alert, {
             sourceType,
             horizonMinutes,
@@ -157,38 +316,36 @@ async function persistAlertBatch(alertType, alerts, context = {}) {
         severity: alert.severity || classifySeverity(alertType, alert, thresholdKm || 0),
         title: alert.title || buildAlertTitle(alertType, alert),
         message: alert.message || buildAlertMessage(alertType, alert, thresholdKm || 0),
-        primaryId: alert.primaryId,
-        secondaryId: alert.secondaryId,
+        primaryId: primaryDisplay || alert.primaryId,
+        secondaryId: secondaryDisplay || alert.secondaryId,
         closestDistanceKm: alert.closestDistanceKm,
         thresholdKm,
         horizonMinutes,
         occurredAt: alert.time ? new Date(alert.time) : new Date(analysisTime),
         sourceName,
         sourceType,
-        details: {
-            analysisTime,
-            area: context.area || null,
-            sampleSeconds: context.sampleSeconds || null,
-            altitudeRangeKm: context.altitudeRangeKm || null,
-            relativeVelocityKmS: alert.relativeVelocityKmS ?? null,
-            collisionProbability: alert.collisionProbability ?? null,
-            altitudeKm: alert.altitudeKm ?? null,
-            classification: alert.classification || null,
-            orbitalElementDelta: alert.orbitalElementDelta || null,
-            epochResidualKm: alert.epochResidualKm ?? null,
-            proximityBeforeKm: alert.minDistanceBeforeKm ?? null,
-            proximityAfterKm: alert.minDistanceAfterKm ?? null,
-            previousTle: alert.previousTle || null,
-            newTle: alert.newTle || null,
-            rawAlert: alert
-        }
-    }));
+        details
+        };
+    });
 
     // Process in parallel batches to prevent connection pool exhaustion and timeouts
     const CHUNK_SIZE = 25;
     for (let i = 0; i < payloads.length; i += CHUNK_SIZE) {
         const chunk = payloads.slice(i, i + CHUNK_SIZE);
         await Promise.all(chunk.map(p => OperationalAlert.upsert(p, context.sequelizeOptions || {})));
+    }
+
+    if (!correlationEngineService) {
+        correlationEngineService = require("./correlationEngineService");
+    }
+
+    try {
+        await correlationEngineService.ingestOperationalAlerts(payloads, {
+            ...context,
+            alertType
+        });
+    } catch (error) {
+        console.warn("Correlation engine ingestion failed:", error);
     }
 
     return {
@@ -289,14 +446,20 @@ async function recordBlindSpotAnalysis(result, context = {}) {
 
 function mapManoeuvreFindingToAlert(finding) {
     return {
-        primaryId: finding.satelliteId,
+        primaryId: finding.satelliteName || finding.satelliteId,
+        primaryName: finding.satelliteName || finding.satelliteId,
+        primaryNoradId: finding.noradId || null,
         secondaryId: finding.nearestIndianId || null,
+        secondaryName: finding.nearestIndianId || null,
+        secondaryNoradId: finding.proximity?.nearestIndianNoradId || finding.nearestIndianNoradId || null,
         closestDistanceKm: finding.minDistanceAfterKm,
         time: finding.occurredAt,
         severity: finding.severity,
         classification: finding.classification,
         epochResidualKm: finding.epochResidualKm,
         orbitalElementDelta: finding.orbitalElementDelta,
+        deltaOrbitalParameters: finding.orbitalElementDelta,
+        confidence: finding.confidence ?? null,
         minDistanceBeforeKm: finding.minDistanceBeforeKm,
         minDistanceAfterKm: finding.minDistanceAfterKm,
         analysisKey: finding.analysisKey,

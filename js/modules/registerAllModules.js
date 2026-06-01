@@ -7,6 +7,7 @@ import conjunctionAnalysisModule from "./definitions/conjunctionAnalysis.js";
 import collisionDetectionModule from "./definitions/collisionDetection.js";
 import blindSpotDetectionModule from "./definitions/blindSpotDetection.js";
 import operationalAlertsModule from "./definitions/operationalAlerts.js";
+import unifiedThreatInsightsModule from "./definitions/unifiedThreatInsights.js";
 import manoeuvreDetectionModule from "./definitions/manoeuvreDetection.js";
 import reentryAnalysisModule from "./definitions/reentryAnalysis.js";
 import characterisationModule from "./definitions/characterisation.js";
@@ -26,6 +27,7 @@ const orderedModules = [
     characterisationModule,
     rapidProcessingModule,
     operationalAlertsModule,
+    unifiedThreatInsightsModule,
     trainingSimulationModule
 ];
 

@@ -5,6 +5,7 @@ const { randomUUID } = require("node:crypto");
 const { serverConfig } = require("./config");
 const { satelliteRouter } = require("./routes/satelliteRoutes");
 const { trainingRouter } = require("./routes/trainingRoutes");
+const { correlationRouter } = require("./routes/correlationRoutes");
 const { logger } = require("./utils/logger");
 const {
     createRateLimiter,
@@ -66,6 +67,7 @@ function createApp() {
     // API routes
     app.use("/api", satelliteRouter);
     app.use("/api/training", trainingRouter);
+    app.use("/api/threat-insights", correlationRouter);
     app.use(handleError);
     return app;
 }

@@ -145,9 +145,27 @@ function refreshSatelliteVisibility() {
             }
         }
 
+        // Mission Control - Newly Detected Objects filter
+        if (show && appState.showOnlyNewSyncSatellites) {
+            if (appState.latestNewSatelliteNames && appState.latestNewSatelliteNames.has(satellite.name)) {
+                // Keep visible
+            } else {
+                show = false;
+            }
+        }
+
         // Mission Control - Only Indian Satellites filter
         if (show && appState.showOnlyIndian && !satellite.isIndian) {
             show = false;
+        }
+
+        // Mission Control - Only Threat Objects filter
+        if (show && appState.showOnlyThreats) {
+            const name = String(satellite.name || "").toUpperCase();
+            const isThreat = ["YAOGAN", "FENGYUN", "SJ-", "SHIYAN", "BEIDOU"].some(p => name.includes(p));
+            if (!isThreat) {
+                show = false;
+            }
         }
 
         // Mission Control - Orbit Class filters

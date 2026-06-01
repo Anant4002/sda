@@ -15,6 +15,12 @@ export const elements = {
     moduleEyebrow: $id("moduleEyebrow"),
     moduleTitle: $id("moduleTitle"),
     moduleSubtitle: $id("moduleSubtitle"),
+    moduleHelpToggle: $id("moduleHelpToggle"),
+    moduleHelpPanel: $id("moduleHelpPanel"),
+    moduleHelpTitle: $id("moduleHelpTitle"),
+    moduleHelpBody: $id("moduleHelpBody"),
+    moduleHelpClose: $id("moduleHelpClose"),
+    moduleHelpBackdrop: $id("moduleHelpBackdrop"),
 
     get horizonSelect() { return $id("horizonSelect"); },
     get collisionThresholdSelect() { return $id("collisionThresholdSelect"); },
@@ -39,5 +45,12 @@ export const elements = {
     get satelliteSearchInput() { return $id("satelliteSearchInput"); },
     get hiddenGroupsSummary() { return $id("hiddenGroupsSummary"); },
     get resetHiddenGroupsButton() { return $id("resetHiddenGroupsButton"); },
-    get globeRotationToggle() { return $id("globeRotationToggle"); }
+    get globeRotationToggle() { return $id("globeRotationToggle"); },
+    get catalogSizeValue() { return $id("catalogSizeValue"); },
+    get lastSyncValue() { return $id("lastSyncValue"); },
+    get freshnessValue() { return $id("freshnessValue"); },
+    get newSatellitesValue() { return $id("newSatellitesValue"); },
+    get viewNewSatellitesBtn() { return $id("viewNewSatellitesBtn"); },
+    get newSatellitesDetectedToggle() { return $id("newSatellitesDetectedToggle"); },
+    get catalogSchedulerInfo() { return $id("catalogSchedulerInfo"); }
 };

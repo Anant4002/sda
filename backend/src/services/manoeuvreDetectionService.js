@@ -136,6 +136,7 @@ function evaluatePair({ previous, incoming, referenceDate, thresholds }) {
 
     return {
         satelliteId: incoming.name,
+        satelliteName: incoming.name,
         noradId: incoming.noradId,
         previous,
         incoming,
@@ -148,9 +149,17 @@ function evaluatePair({ previous, incoming, referenceDate, thresholds }) {
             raanDeg: deltaRaan,
             semiMajorAxisKm: deltaSma
         },
+        deltaOrbitalParameters: {
+            inclinationDeg: deltaInc,
+            eccentricity: deltaEcc,
+            meanMotionRevPerDay: deltaMm,
+            raanDeg: deltaRaan,
+            semiMajorAxisKm: deltaSma
+        },
         epochResidualKm,
         routineCandidate,
-        significant
+        significant,
+        confidence: significant ? 0.75 : 0.55
     };
 }
 
@@ -186,6 +195,7 @@ async function finalizeProximityDraft(draft, incomingCatalog, referenceDate, thr
     }
 
     let bestIndianId = null;
+    let bestIndianNoradId = null;
     let bestMinNew = Infinity;
     let bestMinOld = Infinity;
 
@@ -209,6 +219,7 @@ async function finalizeProximityDraft(draft, incomingCatalog, referenceDate, thr
             bestMinNew = minNew;
             bestMinOld = minOld;
             bestIndianId = candidate.name;
+            bestIndianNoradId = candidate.noradId || null;
         }
     }
 
@@ -225,7 +236,8 @@ async function finalizeProximityDraft(draft, incomingCatalog, referenceDate, thr
         proximityThreat,
         minDistanceBeforeKm,
         minDistanceAfterKm,
-        nearestIndianId: bestIndianId
+        nearestIndianId: bestIndianId,
+        nearestIndianNoradId: bestIndianNoradId
     };
 }
 
@@ -623,12 +635,14 @@ async function analyzeTargetManoeuvre(noradId, satelliteName, options = {}) {
         classification,
         severity,
         threatScore,
+        confidence: Math.max(0.1, Math.min(1, threatScore / 100)),
         assessment: generateAssessment(finalized, thresholds),
         occurredAt: incoming.tleEpoch || incoming.ingestedAt,
         deltas: finalized.orbitalElementDelta,
         epochResidualKm: finalized.epochResidualKm,
         proximity: {
             nearestIndianId: finalized.nearestIndianId,
+            nearestIndianNoradId: finalized.nearestIndianNoradId || null,
             minDistanceBeforeKm: finalized.minDistanceBeforeKm,
             minDistanceAfterKm: finalized.minDistanceAfterKm
         },

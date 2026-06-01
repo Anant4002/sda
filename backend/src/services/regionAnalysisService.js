@@ -157,9 +157,13 @@ function analyzeRegionScanFromRecords(records, area, startTime, horizonMinutes, 
     for (const pass of passes) {
         alerts.push({
             primaryId: pass.id,
+            primaryName: pass.record?.name || pass.id,
+            primaryNoradId: pass.noradId || null,
             secondaryId: null,
             closestDistanceKm: pass.closestApproachKm,
             altitudeKm: pass.peakAltitudeKm,
+            tca: pass.closestApproachTime || pass.startTime,
+            closestApproachTime: pass.closestApproachTime || pass.startTime,
             time: pass.closestApproachTime || pass.startTime,
             severity: pass.closestApproachKm <= thresholdKm ? "critical" : "warning"
         });
@@ -364,6 +368,15 @@ function analyzeBlindSpotFromRecords(records, area, startTime, horizonMinutes, m
         primaryId: null,
         secondaryId: null,
         closestDistanceKm: null,
+        region: {
+            name: area.name || "Regional Area",
+            centroid,
+            points: area.points
+        },
+        regionHash,
+        regionName: area.name || "Regional Area",
+        startTime: bw.startTime,
+        endTime: bw.endTime,
         time: bw.startTime,
         durationMinutes: bw.durationMinutes,
         severity: bw.durationMinutes > 60 ? "critical" : "warning"
@@ -375,6 +388,15 @@ function analyzeBlindSpotFromRecords(records, area, startTime, horizonMinutes, m
             primaryId: null,
             secondaryId: null,
             closestDistanceKm: null,
+            region: {
+                name: area.name || "Regional Area",
+                centroid,
+                points: area.points
+            },
+            regionHash,
+            regionName: area.name || "Regional Area",
+            startTime: startDate.toISOString(),
+            endTime: new Date(startDate.getTime() + horizonMinutes * 60 * 1000).toISOString(),
             time: startDate.toISOString(),
             severity: horizonMinutes > 60 ? "critical" : "warning"
         });

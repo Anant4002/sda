@@ -103,17 +103,81 @@ function formatDataAge(ageSeconds) {
     return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
 }
 
+function formatOpLastUpdate(ageSeconds) {
+    if (ageSeconds === undefined || ageSeconds === null || Number.isNaN(ageSeconds)) {
+        return "5 sec ago";
+    }
+    if (ageSeconds < 60) {
+        return `${Math.max(1, Math.round(ageSeconds))} sec ago`;
+    }
+    const minutes = Math.floor(ageSeconds / 60);
+    if (minutes < 60) {
+        return `${minutes} min ago`;
+    }
+    const hours = Math.floor(minutes / 60);
+    return `${hours} hr ago`;
+}
+
 export function renderCatalogStatus(status = null, history = []) {
     if (!elements.catalogStatusSummary || !elements.catalogHistoryList) {
         return;
     }
+
+    // Operational Summary elements
+    const opActiveText = document.getElementById("opActiveObjectsText");
+    const opIndianText = document.getElementById("opIndianAssetsText");
+    const opThreatText = document.getElementById("opThreatObjectsText");
+    const opLastUpdateText = document.getElementById("opLastUpdateText");
+    const opStatusDot = document.getElementById("opStatusDot");
+    const opStatusText = document.getElementById("opStatusText");
+    const opNewSatsText = document.getElementById("opNewSatellitesText");
+    const opNewSatsCard = document.getElementById("opNewSatellitesCard");
+
+    const activeCount = status?.currentCount || (appState.satellites ? appState.satellites.length : 15510);
+    const indianCount = appState.satellites ? appState.satellites.filter(s => s.isIndian).length : 49;
+    const threatCount = appState.satellites ? appState.satellites.filter(isThreatSatellite).length : 0;
+
+    if (opActiveText) opActiveText.textContent = formatNumber(activeCount, 0);
+    if (opIndianText) opIndianText.textContent = formatNumber(indianCount, 0);
+    if (opThreatText) opThreatText.textContent = formatNumber(threatCount, 0);
+
     if (!status) {
         elements.catalogStatusSummary.textContent = "Catalog status unavailable.";
+        if (opStatusText) opStatusText.textContent = "Unavailable";
+        if (opStatusDot) opStatusDot.textContent = "🔴";
+        if (opLastUpdateText) opLastUpdateText.textContent = "N/A";
     } else {
         const latestVersion = status.latestVersion || {};
         const syncTime = latestVersion.syncedAt ? formatDateTime(latestVersion.syncedAt) : "Unknown";
         const freshness = formatDataAge(status.dataAgeSeconds);
         const sourceName = latestVersion.sourceName || "Unknown source";
+
+        // Update Operational Summary specific items
+        if (opLastUpdateText) {
+            opLastUpdateText.textContent = formatOpLastUpdate(status.dataAgeSeconds);
+        }
+
+        if (opStatusText && status.scheduler) {
+            const schedulerState = status.scheduler.status || "Unknown";
+            opStatusText.textContent = schedulerState.charAt(0).toUpperCase() + schedulerState.slice(1).toLowerCase();
+            if (opStatusDot) {
+                const dotMap = {
+                    HEALTHY: "🟢",
+                    SYNCING: "🔵",
+                    STALE: "🟡",
+                    DEGRADED: "🟡",
+                    RECOVERING: "🟡",
+                    FAILED: "🔴"
+                };
+                opStatusDot.textContent = dotMap[schedulerState] || "🟢";
+            }
+        }
+
+        const newSatsCount = status.latestSyncRun ? (status.latestSyncRun.newSatellitesFound || 0) : 0;
+        if (opNewSatsText) opNewSatsText.textContent = formatNumber(newSatsCount, 0);
+        if (opNewSatsCard) {
+            opNewSatsCard.style.display = newSatsCount > 0 ? "flex" : "none";
+        }
 
         let schedulerHtml = "";
         if (status.scheduler) {
@@ -1351,8 +1415,31 @@ export function renderSatelliteDirectory(toggleSatellitePath, hideGroup, clearHi
         satellites = satellites.filter((s) => s.firstAddedAt && new Date(s.firstAddedAt).getTime() >= thirtyDaysAgo);
     }
 
+    if (appState.showOnlyNewSyncSatellites) {
+        satellites = satellites.filter((s) => appState.latestNewSatelliteNames && appState.latestNewSatelliteNames.has(s.name));
+    }
+
     if (appState.showOnlyIndian) {
         satellites = satellites.filter((s) => s.isIndian);
+    }
+
+    if (appState.showOnlyThreats) {
+        satellites = satellites.filter((s) => isThreatSatellite(s));
+    }
+
+    if (appState.activePriorityGroup) {
+        const group = appState.activePriorityGroup;
+        if (group === "indian") {
+            satellites = satellites.filter((s) => s.isIndian);
+        } else if (group === "chinese_isr") {
+            satellites = satellites.filter((s) => /YAOGAN|GAOFEN|ZHUHAI/i.test(s.name));
+        } else if (group === "adversary_mil") {
+            satellites = satellites.filter((s) => /SHIYAN|SHIJIAN|TIANHUI|COSMOS/i.test(s.name));
+        } else if (group === "nav") {
+            satellites = satellites.filter((s) => /BEIDOU|GPS|GLONASS|GALILEO|IRNSS/i.test(s.name));
+        } else if (group === "commercial") {
+            satellites = satellites.filter((s) => /STARLINK|ONEWEB|KUIPER|DIGUI|FLOCK|PLANET|MAXAR/i.test(s.name));
+        }
     }
 
     if (appState.orbitClassFilter) {
@@ -1384,12 +1471,32 @@ export function renderSatelliteDirectory(toggleSatellitePath, hideGroup, clearHi
 
     const groups = buildSatelliteGroups(satellites);
     const query = normalizeSearchValue(elements.satelliteSearchInput.value);
-    const filteredGroups = groups.filter((group) => !query || group.label.includes(query));
-    const visibleGroups = filteredGroups.slice(0, SATELLITE_FILTER_RESULT_LIMIT);
 
-    elements.indianSummary.textContent = appState.hideCommercialSatellites
-        ? `${groups.length} satellite groups loaded. Commercial satellites are hidden.`
-        : `${groups.length} satellite groups loaded.`;
+    // Support Name or NORAD ID in search matching
+    const filteredGroups = groups.filter((group) => {
+        if (!query) return true;
+        if (group.label.includes(query)) return true;
+        return group.satellites.some(s => {
+            const norad = String(s.noradId || "").toUpperCase();
+            return norad.includes(query);
+        });
+    });
+
+    // 5-item Pagination
+    const PAGE_SIZE = 5;
+    if (appState.catalogPage === undefined) {
+        appState.catalogPage = 1;
+    }
+    const totalMatches = filteredGroups.length;
+    const totalPages = Math.max(1, Math.ceil(totalMatches / PAGE_SIZE));
+    if (appState.catalogPage > totalPages) {
+        appState.catalogPage = totalPages;
+    }
+    const startIndex = (appState.catalogPage - 1) * PAGE_SIZE;
+    const visibleGroups = filteredGroups.slice(startIndex, startIndex + PAGE_SIZE);
+
+    // Operator-first clean directory title
+    elements.indianSummary.textContent = appState.isAreaFocusMode ? "Region Focus Working Set" : "SDA Operational Directory";
 
     if (!filteredGroups.length) {
         elements.indianSatList.innerHTML = safeHtml`<div class="hint">No satellite names matched the current search.</div>`;
@@ -1418,8 +1525,42 @@ export function renderSatelliteDirectory(toggleSatellitePath, hideGroup, clearHi
         }).join("");
     }
 
-    if (filteredGroups.length > visibleGroups.length) {
-        elements.indianSatList.innerHTML += `<div class="hint">Showing first ${visibleGroups.length} matching satellite groups. Narrow the search to see more.</div>`;
+    // Update Pagination elements if they exist
+    const prevBtn = document.getElementById("prevCatalogPageBtn");
+    const nextBtn = document.getElementById("nextCatalogPageBtn");
+    const pageInfo = document.getElementById("catalogPageInfo");
+
+    if (pageInfo) {
+        const endShow = Math.min(startIndex + PAGE_SIZE, totalMatches);
+        if (totalMatches === 0) {
+            pageInfo.textContent = "Showing 0 of 0";
+        } else {
+            pageInfo.textContent = `Showing ${startIndex + 1}–${endShow} of ${totalMatches}`;
+        }
+    }
+
+    if (prevBtn) {
+        if (appState.catalogPage === 1) {
+            prevBtn.setAttribute("disabled", "true");
+            prevBtn.style.opacity = "0.4";
+            prevBtn.style.pointerEvents = "none";
+        } else {
+            prevBtn.removeAttribute("disabled");
+            prevBtn.style.opacity = "1";
+            prevBtn.style.pointerEvents = "auto";
+        }
+    }
+
+    if (nextBtn) {
+        if (appState.catalogPage === totalPages) {
+            nextBtn.setAttribute("disabled", "true");
+            nextBtn.style.opacity = "0.4";
+            nextBtn.style.pointerEvents = "none";
+        } else {
+            nextBtn.removeAttribute("disabled");
+            nextBtn.style.opacity = "1";
+            nextBtn.style.pointerEvents = "auto";
+        }
     }
 
     const hiddenGroups = Array.from(appState.hiddenGroupLabels).sort();
@@ -1880,6 +2021,200 @@ export function renderRegionalAccessAnalysis(result) {
                 <strong>Revisit Delta (Revisit Δ):</strong> Shows the percentage increase or decrease in observation frequency. A negative percentage (e.g. -40%) indicates a shorter revisit time (higher risk).
                 <br><br>
                 <strong>Confidence:</strong> The probabilistic threshold that this visibility profile represents a sustained orbital realignment, rather than a transient propagation cross-over.
+            </div>
+        </div>
+    `;
+}
+
+export function renderUnifiedThreatInsights(data) {
+    if (!elements.analysisPanel) {
+        return;
+    }
+
+    if (!data) {
+        elements.analysisPanel.innerHTML = safeHtml`<div class="hint">No threat data available.</div>`;
+        return;
+    }
+
+    const incidents = Array.isArray(data.incidents) ? data.incidents : [];
+    const pagination = data.pagination || {
+        page: 1,
+        pageSize: 5,
+        totalCount: 0,
+        totalPages: 1,
+        startIndex: 0,
+        endIndex: 0
+    };
+
+    const hasIncidents = incidents.length > 0;
+
+    const incidentsHtml = incidents.map(incident => {
+        const severityClass = incident.priority === "CRITICAL" ? "badge-danger" :
+                             (incident.priority === "HIGH" ? "badge-warning" :
+                             (incident.priority === "MEDIUM" ? "badge-monitor" : "badge-success"));
+
+        const priorityColor = incident.priority === "CRITICAL" ? "var(--severity-high)" :
+                              (incident.priority === "HIGH" ? "var(--severity-warning)" :
+                              (incident.priority === "MEDIUM" ? "var(--severity-medium)" : "var(--severity-low)"));
+
+        const scoreColor = incident.threatScore >= 80 ? "var(--danger)" :
+                           (incident.threatScore >= 50 ? "var(--warning)" : "var(--success)");
+
+        const whyMatters = Array.isArray(incident.whyThisMatters) ? incident.whyThisMatters :
+                           (incident.threatRationale?.bullets || []);
+
+        const whyMattersHtml = whyMatters.length > 0
+            ? whyMatters.map(bullet => `<li style="margin-bottom: 4px;">${escapeHtml(bullet)}</li>`).join("")
+            : `<li style="color: var(--text-dim);">No operational why-bullets defined.</li>`;
+
+        const correlationBullets = incident.correlationExplanation?.bullets || [];
+        const correlationHtml = correlationBullets.length > 0
+            ? correlationBullets.map(bullet => `<li style="margin-bottom: 4px;">${escapeHtml(bullet)}</li>`).join("")
+            : `<li style="color: var(--text-dim);">No correlation detail bullets defined.</li>`;
+
+        const events = Array.isArray(incident.linkedEvents) ? incident.linkedEvents : [];
+        const eventsHtml = events.map(evt => {
+            const evtSeverityClass = evt.severity === "critical" || evt.severity === "danger" ? "badge-danger" :
+                                    (evt.severity === "warning" ? "badge-warning" : "badge-success");
+
+            const timeStr = evt.occurredAt ? new Date(evt.occurredAt).toLocaleString() : "Unknown Time";
+            const detailsList = [];
+            if (evt.missDistanceKm !== undefined && evt.missDistanceKm !== null) {
+                detailsList.push(`Miss: <strong>${formatNumber(evt.missDistanceKm, 1)} km</strong>`);
+            }
+            if (evt.relativeVelocityKmS !== undefined && evt.relativeVelocityKmS !== null) {
+                detailsList.push(`Velocity: <strong>${formatNumber(evt.relativeVelocityKmS, 2)} km/s</strong>`);
+            }
+            if (evt.tca) {
+                detailsList.push(`TCA: <strong>${new Date(evt.tca).toLocaleString()}</strong>`);
+            }
+
+            const detailsStr = detailsList.length > 0
+                ? `<div style="font-size: 11px; margin-top: 4px; font-family: monospace; color: var(--text-dim); display: flex; gap: 12px; flex-wrap: wrap;">${detailsList.join(" | ")}</div>`
+                : "";
+
+            return `
+                <div class="list-item" style="border-left: 2px solid var(--text-muted); background: rgba(255,255,255,0.01); padding: 8px 12px; border-radius: 4px; margin-bottom: 6px;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                        <div>
+                            <strong style="font-size: 12px; color: var(--text-bright);">${escapeHtml(evt.title || evt.moduleName || "Operational Alert")}</strong>
+                            <div style="font-size: 10px; color: var(--text-dim); margin-top: 1px;">Source: ${escapeHtml(evt.moduleName || evt.sourceName || "System")} | ${timeStr}</div>
+                        </div>
+                        <span class="badge ${evtSeverityClass}" style="font-size: 8px; padding: 1px 4px;">${escapeHtml((evt.severity || "info").toUpperCase())}</span>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px; line-height: 1.35;">${escapeHtml(evt.description || "")}</div>
+                    ${detailsStr}
+                </div>
+            `;
+        }).join("");
+
+        const secondaryObjStr = incident.displaySecondaryName
+            ? ` <span style="color: var(--text-dim); margin: 0 4px;">&harr;</span> <span style="color: var(--text-bright); font-weight: 500;">${escapeHtml(incident.displaySecondaryName)}</span>`
+            : "";
+
+        return `
+            <div class="list-item" style="border-left: 4px solid ${priorityColor}; background: rgba(255,255,255,0.02); padding: 16px; border-radius: 8px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="status-dot status-active" style="background-color: ${priorityColor}; display: inline-block;"></span>
+                            <span style="font-family: monospace; font-size: 11px; color: var(--text-muted); font-weight: 600;">${escapeHtml(incident.incidentUid)}</span>
+                        </div>
+                        <h3 style="margin: 4px 0 2px 0; color: white; font-size: 16px; font-weight: 600;">${escapeHtml(incident.title)}</h3>
+                        <div style="font-size: 12px; margin-top: 2px;">
+                            <span style="color: var(--text-dim);">Target:</span>
+                            <span style="color: var(--text-bright); font-weight: 500;">${escapeHtml(incident.displayPrimaryName)}</span>
+                            ${secondaryObjStr}
+                        </div>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; text-align: right;">
+                        <span class="badge ${severityClass}" style="padding: 3px 8px; font-size: 10px; font-weight: 700; border-radius: 4px;">${escapeHtml(incident.priority)}</span>
+                        <span class="badge badge-outline" style="font-size: 9px; padding: 2px 6px;">${escapeHtml(incident.assetClassification)}</span>
+                    </div>
+                </div>
+
+                <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 6px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 11px; font-family: monospace;">
+                        <span style="color: var(--text-muted); font-weight: 600;">THREAT LEVEL ASSESSMENT:</span>
+                        <strong style="color: ${scoreColor}; font-size: 12px;">${incident.threatScore}/100</strong>
+                    </div>
+                    <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden;">
+                        <div style="width: ${incident.threatScore}%; height: 100%; background: ${scoreColor}; border-radius: 3px;"></div>
+                    </div>
+                </div>
+
+                <div style="font-size: 13px; line-height: 1.45; color: var(--text-bright); background: rgba(0,0,0,0.15); padding: 10px 12px; border-radius: 6px; border-left: 3px solid rgba(255,255,255,0.1);">
+                    ${escapeHtml(incident.summary)}
+                </div>
+
+                <div>
+                    <h4 style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: var(--text-warning); text-transform: uppercase; letter-spacing: 0.05em;">Situational Assessment</h4>
+                    <ul style="margin: 0; padding-left: 20px; font-size: 12.5px; line-height: 1.45; color: var(--text-muted);">
+                        ${whyMattersHtml}
+                    </ul>
+                </div>
+
+                <div class="micro-card" style="border: 1px solid rgba(0, 180, 216, 0.2); background: rgba(0, 180, 216, 0.03); padding: 12px; border-radius: 6px; margin-top: 4px;">
+                    <div style="display: flex; gap: 8px; align-items: flex-start;">
+                        <span style="font-size: 16px; line-height: 1; flex-shrink: 0; color: var(--info);">⚡</span>
+                        <div>
+                            <strong style="font-size: 11px; color: var(--info); font-family: monospace; display: block; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.05em;">Operator Action Directive</strong>
+                            <span style="font-size: 12.5px; line-height: 1.4; color: var(--text-bright); display: block;">${escapeHtml(incident.recommendation)}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px;">
+                    <details style="width: 100%;">
+                        <summary style="font-size: 11.5px; color: var(--text-dim); font-family: monospace; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; font-weight: 600;">
+                            <span>🔍 CORRELATION RATIONALE (${incident.linkedEventCount} alert${incident.linkedEventCount !== 1 ? 's' : ''} merged)</span>
+                        </summary>
+                        <div style="margin-top: 8px; font-size: 12px; color: var(--text-dim);">
+                            <div style="margin-bottom: 8px; line-height: 1.4; color: var(--text-muted);">
+                                <strong>Explanation:</strong> ${escapeHtml(incident.correlationExplanation?.summary || "")}
+                            </div>
+                            <ul style="margin: 0 0 10px 0; padding-left: 20px; line-height: 1.4;">
+                                ${correlationHtml}
+                            </ul>
+
+                            <div style="margin-top: 8px;">
+                                <strong style="font-size: 11px; color: var(--text-muted); font-family: monospace; display: block; margin-bottom: 6px; text-transform: uppercase;">Correlated Alerts History:</strong>
+                                <div style="display: flex; flex-direction: column; gap: 6px;">
+                                    ${eventsHtml}
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        `;
+    }).join("");
+
+    elements.analysisPanel.innerHTML = safeHtml`
+        <div class="eyebrow">Correlation Intelligence & Space Domain Awareness</div>
+        <h2>Unified Threat Queue</h2>
+        <p style="margin-bottom: 16px; color: var(--text-muted);">Merged multi-sensor alerts correlated into high-fidelity space operational threat insights.</p>
+
+        <div class="section">
+            <div class="list">
+                ${markSafe(hasIncidents ? incidentsHtml : '<div class="hint" style="text-align: center; padding: 24px 0;">No active incidents matched the current queue filters.</div>')}
+            </div>
+        </div>
+
+        <div class="section" style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; margin-top: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 12px; color: var(--text-dim); font-family: monospace;">
+                    Showing ${pagination.startIndex}–${pagination.endIndex} of ${pagination.totalCount} incidents
+                </span>
+                <div style="display: flex; gap: 8px;">
+                    <button class="button" data-uti-action="prev-page" ${pagination.page <= 1 ? "disabled" : ""} style="padding: 4px 10px; font-size: 12px; min-width: 80px;">
+                        Previous
+                    </button>
+                    <button class="button" data-uti-action="next-page" ${pagination.page >= pagination.totalPages ? "disabled" : ""} style="padding: 4px 10px; font-size: 12px; min-width: 80px;">
+                        Next
+                    </button>
+                </div>
             </div>
         </div>
     `;

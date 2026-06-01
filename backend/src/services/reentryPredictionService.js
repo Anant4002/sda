@@ -164,6 +164,7 @@ async function predictSatelliteReentry(noradId, satelliteName, options = {}) {
         reentryWindow: simulation.reentryWindow, // e.g. "±6 hours"
         impactCorridor: simulation.impactCorridor, // Array of {lat, lon}
         riskLevel,
+        confidence: isFlaggedForDecay ? (riskLevel === "HIGH" ? 0.9 : 0.75) : 0.55,
         strategicRisks,
         indiaSpecificRisk: indiaRisks.length > 0 ? `Threat detected over ${indiaRisks.map(r => r.name).join(", ")}` : "No immediate threat to Indian mainland detected.",
         message: simulation.message,
@@ -173,12 +174,15 @@ async function predictSatelliteReentry(noradId, satelliteName, options = {}) {
     // Priority Alerting (Proposal Requirement 3)
     if (prediction.strategicRisks.length > 0 || riskLevel === "HIGH") {
         await recordOperationalAlert({
+            alertType: "reentry",
             title: "Re-entry Priority Alert",
             severity: prediction.strategicRisks.length > 0 ? "critical" : "warning",
             message: prediction.strategicRisks.length > 0
                 ? `${satelliteName} re-entry corridor passes over ${prediction.strategicRisks.map(r => r.name).join(", ")}.`
                 : `${satelliteName} re-entry corridor is clear of strategic installations.`,
             primaryId: satelliteName,
+            primaryObjectName: satelliteName,
+            primaryNoradId: noradId,
             occurredAt: new Date().toISOString(),
             details: prediction
         }, { transaction });

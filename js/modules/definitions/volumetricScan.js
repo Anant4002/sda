@@ -8,7 +8,7 @@ import {
     updateAreaReadout,
     updateCollisionAlert
 } from "../../ui.js";
-import { drawPredictedPaths, updateSelectedAreaVisual } from "../../viewer.js";
+import { drawPredictedPaths, enterAreaFocusMode, exitAreaFocusMode, updateSelectedAreaVisual } from "../../viewer.js";
 import {
     alertCard,
     field,
@@ -60,7 +60,7 @@ function buildSidebar() {
         ${field("Forecast Window", selectControl("horizonSelect", HORIZON_OPTIONS), { id: "horizonSelect" })}
         ${altitudeRange}
         
-        <div class="section">
+        <div class="section" id="vsProximitySection">
             <div class="section-title">Scan Proximity Radius</div>
             <div class="field">
                 <select id="proximitySelect">
@@ -147,16 +147,16 @@ export function runVolumetricScan(ctx) {
         appState.analysisWorkerBusy = false;
         
         // NOISE REDUCTION: Hide all satellites except those relevant to the scanned region
-        const relevantSats = new Set(response.result.passes.map(p => p.id));
+        const relevantSats = new Set((response.result.passes || []).map((p) => String(p.id)));
         appState.volumetricScanActive = true;
         appState.volumetricRelevantSats = relevantSats;
+        enterAreaFocusMode(relevantSats);
         
         if (typeof ctx.shared.refreshSatelliteVisibility === "function") {
             ctx.shared.refreshSatelliteVisibility();
         }
 
         renderAreaAnalysis(response.result);
-        drawPredictedPaths(response.result.topPaths);
         setStatus(`Volumetric scan complete. ${response.result.passes?.length || 0} passes identified within ${response.result.minAltitudeKm}-${response.result.maxAltitudeKm} km.`);
         await ctx.shared.refreshOperationalAlerts(response.apiBaseUrl);
     }).catch((error) => {
@@ -259,14 +259,21 @@ export default {
             reanalyzeOnChange();
         });
 
+        const proximitySection = document.getElementById("vsProximitySection");
         const updateSelectionMode = () => {
             const mode = presetRegionTypeSelect.value;
             if (mode === "manual") {
                 geocoderSearchContainer.style.display = "none";
                 manualTracingControlsContainer.style.display = "block";
+                if (proximitySection) {
+                    proximitySection.style.display = "none";
+                }
             } else {
                 geocoderSearchContainer.style.display = "block";
                 manualTracingControlsContainer.style.display = "none";
+                if (proximitySection) {
+                    proximitySection.style.display = "block";
+                }
                 if (isTracing()) {
                     stopTraceMode(true);
                 }
@@ -311,6 +318,7 @@ export default {
             // Draw boundary outline on Cesium map
             updateSelectedAreaVisual(appState.selectedArea);
             updateAreaReadout();
+            enterAreaFocusMode([]);
 
             // Camera flyTo bounding box
             ctx.shared.viewer.camera.flyTo({
@@ -388,12 +396,13 @@ export default {
 
         const unsubscribeArea = eventBus.on(events.areaSelected, () => {
             // Only auto-run if manual is selected to avoid resetting loops
-            if (presetRegionTypeSelect.value === "manual") {
-                runVolumetricScan(ctx);
-            }
+            // if (presetRegionTypeSelect.value === "manual") {
+            //     runVolumetricScan(ctx);
+            // }
         });
         scope.addCleanup(unsubscribeArea);
 
+        updateSelectionMode();
         updateAreaReadout();
 
         return {
@@ -406,6 +415,7 @@ export default {
                 // RESTORE NOISE REDUCTION
                 appState.volumetricScanActive = false;
                 appState.volumetricRelevantSats = null;
+                exitAreaFocusMode();
                 if (typeof ctx.shared.refreshSatelliteVisibility === "function") {
                     ctx.shared.refreshSatelliteVisibility();
                 }

@@ -213,12 +213,16 @@ async function analyzeConjunctionsFromRecords(records, area, startTime, horizonM
 
                     conjunctions.push({
                         primaryId: primary.id,
+                        primaryName: primary.name || primary.id,
                         primaryNoradId: primary.noradId || null,
                         primaryIsIndian: primary.isIndian,
                         secondaryId: secondary.id,
+                        secondaryName: secondary.name || secondary.id,
                         secondaryNoradId: secondary.noradId || null,
                         secondaryIsIndian: secondary.isIndian,
                         closestDistanceKm: minDistance,
+                        missDistanceKm: minDistance,
+                        tca: bestTca.toISOString(),
                         time: bestTca.toISOString(),
                         relativeVelocityKmS: relVelKmS,
                         collisionProbability: pc,

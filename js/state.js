@@ -22,6 +22,8 @@ export const appState = {
     tracePreviewPoint: null,
     lastCatalogSyncAt: null,
     catalogApiBaseUrl: null,
+    showOnlyNewSyncSatellites: false,
+    latestNewSatelliteNames: new Set(),
 
     // Simulation & Training
     simulationMode: false,
@@ -43,6 +45,10 @@ export const appState = {
     driftEntities: [],
     driftMagnification: 1.0,
     savedVisibilityState: new Map(),
+
+    // Area Focus
+    isAreaFocusMode: false,
+    areaFocusSatelliteIds: new Set(),
 
     // Visualisation Modes
     isInertialViewEnabled: true,

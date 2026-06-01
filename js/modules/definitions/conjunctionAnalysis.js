@@ -7,7 +7,7 @@ import {
     updateAreaReadout,
     updateCollisionAlert
 } from "../../ui.js";
-import { drawConjunctionEvent, clearConjunctionVisuals, updateSelectedAreaVisual } from "../../viewer.js";
+import { drawConjunctionEvent, clearConjunctionVisuals, enterAreaFocusMode, exitAreaFocusMode, updateSelectedAreaVisual } from "../../viewer.js";
 import {
     field,
     selectControl,
@@ -296,6 +296,7 @@ export default {
 
             // Draw boundary outline on Cesium map
             updateSelectedAreaVisual(appState.selectedArea);
+            enterAreaFocusMode([]);
             updateAreaReadout();
 
             // Camera flyTo bounding box
@@ -387,6 +388,7 @@ export default {
             unmount() {
                 scope.dispose();
                 clearConjunctionVisuals();
+                exitAreaFocusMode();
                 appState.simulationMode = false;
                 appState.simulationClock = null;
                 appState.simulationPaused = true;

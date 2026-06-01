@@ -73,7 +73,7 @@ function buildSidebar() {
                 </div>
             </div>
         </div>
-        
+
         <div class="section">
             <div class="section-title">Active Selection</div>
             <div id="orbitActiveSelection" class="micro-card">No orbit currently rendered.</div>
@@ -86,7 +86,6 @@ export default {
     id: "orbit-propagation",
     label: "Orbit Propagation and Tracking",
     eyebrow: "Tracking Operations",
-    description: "Continuous SGP4 propagation of the catalog and one-orbit preview tooling.",
     dockEyebrow: "Tracking",
     dockLabel: "Orbit Propagation",
     status: "ready",
@@ -129,8 +128,8 @@ export default {
 
             searchTimeout = setTimeout(() => {
                 // Filter satellites from appState matching query and current country filter
-                let filtered = appState.satellites.filter(s => 
-                    s.name.toUpperCase().includes(query) || 
+                let filtered = appState.satellites.filter(s =>
+                    s.name.toUpperCase().includes(query) ||
                     (s.noradId && String(s.noradId).includes(query))
                 );
 
@@ -186,7 +185,7 @@ export default {
         radios.forEach(radio => {
             scope.add(radio, "change", () => {
                 appState.orbitCountryFilter = radio.value;
-                
+
                 // Show/hide friendly config block
                 if (radio.value === "friendly") {
                     friendlyConfigSection.style.display = "block";
@@ -208,7 +207,7 @@ export default {
             const list = val.split(",").map(p => p.trim()).filter(Boolean);
             appState.friendlySatellites = list;
             saveFriendlySatellites(list);
-            
+
             if (typeof ctx.shared.refreshSatelliteVisibility === "function") {
                 ctx.shared.refreshSatelliteVisibility();
             }
@@ -235,7 +234,7 @@ export default {
         });
 
         renderActiveSelection();
-        
+
         scope.addCleanup(eventBus.on(events.satelliteSelected, () => renderActiveSelection()));
         scope.addCleanup(eventBus.on(events.satelliteCleared, () => renderActiveSelection()));
 

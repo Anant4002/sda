@@ -236,6 +236,47 @@ router.get("/catalog/status", requireApiKey, async (req, res) => {
     }
 });
 
+router.get("/catalog/latest-new-satellites", requireApiKey, async (req, res) => {
+    try {
+        const { CatalogSyncRun } = require("../models/catalogSyncRun");
+        const { CatalogSyncNewSatellite } = require("../models/catalogSyncNewSatellite");
+        const { Satellite } = require("../models/satellite");
+
+        // Find the most recent sync run
+        const latestSyncRun = await CatalogSyncRun.findOne({
+            order: [["completedAt", "DESC"]]
+        });
+
+        if (!latestSyncRun) {
+            return res.json({ satellites: [] });
+        }
+
+        // Fetch all CatalogSyncNewSatellite rows for that run
+        const newSats = await CatalogSyncNewSatellite.findAll({
+            where: { syncRunId: latestSyncRun.id }
+        });
+
+        if (newSats.length === 0) {
+            return res.json({ satellites: [] });
+        }
+
+        const noradIds = newSats.map(ns => ns.noradId);
+        const { serializeSatellite } = require("../services/satelliteMetadataService");
+
+        const satellites = await Satellite.findAll({
+            where: {
+                noradId: noradIds
+            }
+        });
+
+        const serialized = satellites.map(serializeSatellite);
+        res.json({ satellites: serialized });
+    } catch (error) {
+        console.error("Failed to load latest new satellites:", error);
+        res.status(500).json({ error: "Unable to load latest new satellites." });
+    }
+});
+
 router.get("/catalog/history", requireApiKey, async (req, res) => {
     try {
         const history = await listCatalogHistory(parseHistoryLimit(req.query.limit));

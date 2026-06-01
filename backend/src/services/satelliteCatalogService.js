@@ -3,6 +3,8 @@ const { Op } = require("sequelize");
 const { Satellite } = require("../models/satellite");
 const { SatelliteCatalogVersion } = require("../models/satelliteCatalogVersion");
 const { CatalogEvent } = require("../models/catalogEvent");
+const { CatalogSyncRun } = require("../models/catalogSyncRun");
+const { CatalogSyncNewSatellite } = require("../models/catalogSyncNewSatellite");
 const { catalogSource, serverConfig } = require("../config");
 const { sequelize } = require("../db");
 const { serializeSatellite } = require("./satelliteMetadataService");
@@ -130,14 +132,20 @@ async function getCatalogStatus() {
         order: [["syncedAt", "DESC"]]
     });
 
+    const latestSyncRun = await CatalogSyncRun.findOne({
+        order: [["completedAt", "DESC"]]
+    });
+
     const currentCount = await Satellite.count();
     const latestVersionPlain = latestVersion ? latestVersion.get({ plain: true }) : null;
+    const latestSyncRunPlain = latestSyncRun ? latestSyncRun.get({ plain: true }) : null;
     const dataAgeSeconds = latestVersionPlain ? Math.max(0, Math.round((Date.now() - new Date(latestVersionPlain.syncedAt).getTime()) / 1000)) : null;
 
     return {
         currentCount,
         dataAgeSeconds,
-        latestVersion: latestVersionPlain
+        latestVersion: latestVersionPlain,
+        latestSyncRun: latestSyncRunPlain
     };
 }
 
@@ -189,6 +197,14 @@ async function seedCatalogHistoryIfMissing() {
             checksum,
             status: "baseline",
             errorMessage: null
+        }, { transaction });
+
+        await CatalogSyncRun.create({
+            startedAt: syncedAt,
+            completedAt: syncedAt,
+            totalBefore: 0,
+            totalAfter: satellites.length,
+            newSatellitesFound: 0
         }, { transaction });
 
         await CatalogEvent.create({

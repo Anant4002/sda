@@ -9,7 +9,7 @@ import {
 } from "./regionPanelTemplate.js";
 import { eventBus, events } from "../eventBus.js";
 import "../../../shared/blindSpotCoverageUtils.js";
-import { updateSelectedAreaVisual } from "../../viewer.js";
+import { enterAreaFocusMode, exitAreaFocusMode, updateSelectedAreaVisual } from "../../viewer.js";
 
 const {
     classifyCoverageLevel,
@@ -111,6 +111,7 @@ function formatDateHeader(date) {
     return date.toLocaleDateString('en-US', options).toUpperCase();
 }
 
+/*
 function buildTimeline() {
     return `
         <div id="bsTimelineOverlay" style="position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%); width: 650px; max-width: calc(100vw - 40px); background: rgba(6, 15, 28, 0.95); border: 1px solid var(--panel-border); border-radius: 14px; padding: 12px; z-index: 20; color: white; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 18px 45px rgba(0, 0, 0, 0.45); backdrop-filter: blur(14px); transition: all 0.3s ease;">
@@ -143,6 +144,7 @@ function buildTimeline() {
         </div>
     `;
 }
+*/
 
 function getFilteredSatrecs() {
     const selectedRegexes = SATELLITE_GROUPS.filter(g => g.selected).map(g => g.regex);
@@ -1394,9 +1396,9 @@ export default {
         root.innerHTML = buildSidebar();
 
         const tlContainer = document.getElementById("bsTimelineContainer");
-        if (tlContainer) {
-            tlContainer.innerHTML = buildTimeline();
-        }
+        // if (tlContainer) {
+        //     tlContainer.innerHTML = buildTimeline();
+        // }
 
 
 
@@ -1426,60 +1428,69 @@ export default {
         const cbGroup = document.querySelectorAll(".sat-group-cb");
 
         const triggerRecalculate = () => {
+            if (appState.analysisInFlight) {
+                setStatus("Error: An analysis is already in progress.");
+                return;
+            }
+            appState.analysisInFlight = true;
             renderAnalysisLoader("Blind Spot Detection", "Recalculating 24h orbital coverage gaps...");
             
             setTimeout(() => {
-                currentSatrecs = getFilteredSatrecs();
-                let target = focusedSite;
-                if (!target && hasSelectedArea()) {
-                    target = {
-                        name: appState.selectedArea.name || "Traced Region",
-                        lat: appState.selectedArea.centroid.lat,
-                        lon: appState.selectedArea.centroid.lon
-                    };
-                }
-                if (target) {
-                    lastActiveTarget = target;
-                    const schedule = generateSchedule(target, currentSatrecs, analysisTimeframeHours, sensorConeAngleDeg);
-                    lastBlindSpotSchedule = schedule;
+                try {
+                    currentSatrecs = getFilteredSatrecs();
+                    let target = focusedSite;
+                    if (!target && hasSelectedArea()) {
+                        target = {
+                            name: appState.selectedArea.name || "Traced Region",
+                            lat: appState.selectedArea.centroid.lat,
+                            lon: appState.selectedArea.centroid.lon
+                        };
+                    }
+                    if (target) {
+                        lastActiveTarget = target;
+                        const schedule = generateSchedule(target, currentSatrecs, analysisTimeframeHours, sensorConeAngleDeg);
+                        lastBlindSpotSchedule = schedule;
 
-                    // Map local schedule to the standard result format for renderAreaAnalysis
-                    const result = {
-                        analysisType: "blind_spot",
-                        blindWindows: schedule.map(bs => ({
-                            startTime: bs.start.toISOString(),
-                            endTime: bs.end.toISOString(),
-                            durationMinutes: bs.duration
-                        })),
-                        region: {
-                            centroid: { lat: target.lat, lon: target.lon }
-                        },
-                        hasCoverage: schedule.length === 0,
-                        coveragePercentage: schedule.debugMetrics ? schedule.debugMetrics.persistentCoveragePercent : 0,
-                        forecastWindowMinutes: analysisTimeframeHours * 60
-                    };
-                    renderAreaAnalysis(result);
+                        // Map local schedule to the standard result format for renderAreaAnalysis
+                        const result = {
+                            analysisType: "blind_spot",
+                            blindWindows: schedule.map(bs => ({
+                                startTime: bs.start.toISOString(),
+                                endTime: bs.end.toISOString(),
+                                durationMinutes: bs.duration
+                            })),
+                            region: {
+                                centroid: { lat: target.lat, lon: target.lon }
+                            },
+                            hasCoverage: schedule.length === 0,
+                            coveragePercentage: schedule.debugMetrics ? schedule.debugMetrics.persistentCoveragePercent : 0,
+                            forecastWindowMinutes: analysisTimeframeHours * 60
+                        };
+                        renderAreaAnalysis(result);
 
-                    const clock = appState.realTimeClock || new Date();
-                    const hasBlindSpots = schedule.length > 0;
-                    updateSiteVisuals(clock, currentSatrecs, ctx.shared.viewer, focusedSite, sensorConeAngleDeg, hasBlindSpots);
-                    updateTracedAreaVisual(clock, currentSatrecs, ctx.shared.viewer, focusedSite, sensorConeAngleDeg, hasBlindSpots);
+                        const clock = appState.realTimeClock || new Date();
+                        const hasBlindSpots = schedule.length > 0;
+                        updateSiteVisuals(clock, currentSatrecs, ctx.shared.viewer, focusedSite, sensorConeAngleDeg, hasBlindSpots);
+                        updateTracedAreaVisual(clock, currentSatrecs, ctx.shared.viewer, focusedSite, sensorConeAngleDeg, hasBlindSpots);
 
-                    if (statusBadge) {
-                        if (currentSatrecs.length === 0) {
-                            statusBadge.textContent = "NO SATELLITES SELECTED";
-                            statusBadge.style.color = "var(--severity-warning)";
-                        } else if (schedule.length === 0) {
-                            statusBadge.textContent = "COVERAGE STABLE";
-                            statusBadge.style.color = "var(--severity-success)";
-                        } else {
-                            statusBadge.textContent = "BLIND WINDOWS MAPPED";
-                            statusBadge.style.color = "var(--severity-danger)";
+                        if (statusBadge) {
+                            if (currentSatrecs.length === 0) {
+                                statusBadge.textContent = "NO SATELLITES SELECTED";
+                                statusBadge.style.color = "var(--severity-warning)";
+                            } else if (schedule.length === 0) {
+                                statusBadge.textContent = "COVERAGE STABLE";
+                                statusBadge.style.color = "var(--severity-success)";
+                            } else {
+                                statusBadge.textContent = "BLIND WINDOWS MAPPED";
+                                statusBadge.style.color = "var(--severity-danger)";
+                            }
                         }
                     }
-                }
 
-                updateCurrentTimeUI();
+                    updateCurrentTimeUI();
+                } finally {
+                    appState.analysisInFlight = false;
+                }
             }, 600);
         };
 
@@ -1524,10 +1535,12 @@ export default {
             today.setUTCHours(0,0,0,0);
             const diff = Math.round((currentBaseDate.getTime() - today.getTime()) / (24 * 60 * 60000));
 
-            if (diff === 0) dateDisplay.textContent = "TODAY";
-            else if (diff === 1) dateDisplay.textContent = "TOMORROW";
-            else if (diff === -1) dateDisplay.textContent = "YESTERDAY";
-            else dateDisplay.textContent = formatDateHeader(currentBaseDate);
+            if (dateDisplay) {
+                if (diff === 0) dateDisplay.textContent = "TODAY";
+                else if (diff === 1) dateDisplay.textContent = "TOMORROW";
+                else if (diff === -1) dateDisplay.textContent = "YESTERDAY";
+                else dateDisplay.textContent = formatDateHeader(currentBaseDate);
+            }
 
             const timeOfDay = appState.realTimeClock.getTime() - new Date(appState.realTimeClock).setUTCHours(0,0,0,0);
             appState.realTimeClock = new Date(currentBaseDate.getTime() + timeOfDay);
@@ -1535,6 +1548,10 @@ export default {
         };
 
         const performSearch = async () => {
+            if (appState.analysisInFlight) {
+                setStatus("Error: An analysis is already in progress.");
+                return;
+            }
             const term = searchInput.value.trim();
             if (!term) return;
 
@@ -1546,6 +1563,7 @@ export default {
                     duration: 1.5
                 });
                 appState.selectedArea = null;
+                exitAreaFocusMode();
                 triggerRecalculate();
                 setStatus(`Monitoring ${focusedSite.name}...`);
                 return;
@@ -1600,6 +1618,7 @@ export default {
                     }, 100)
                 };
                 updateSelectedAreaVisual(appState.selectedArea);
+                enterAreaFocusMode([]);
 
                 focusedSite = null;
                 clearGridVisuals(ctx.shared.viewer);
@@ -1616,28 +1635,28 @@ export default {
             }
         };
 
-        const minimizeBtn = document.getElementById("bsMinimizeBtn");
-        const tlContent = document.getElementById("bsTimelineContent");
-        const tlOverlay = document.getElementById("bsTimelineOverlay");
-        let isMinimized = false;
+        // const minimizeBtn = document.getElementById("bsMinimizeBtn");
+        // const tlContent = document.getElementById("bsTimelineContent");
+        // const tlOverlay = document.getElementById("bsTimelineOverlay");
+        // let isMinimized = false;
+        // 
+        // scope.add(minimizeBtn, "click", () => {
+        //     isMinimized = !isMinimized;
+        //     tlContent.style.display = isMinimized ? "none" : "flex";
+        //     minimizeBtn.innerHTML = isMinimized ? "\u25FB" : "\u2212";
+        //     tlOverlay.style.bottom = isMinimized ? "10px" : "100px";
+        //     tlOverlay.style.width = isMinimized ? "250px" : "650px";
+        // });
 
-        scope.add(minimizeBtn, "click", () => {
-            isMinimized = !isMinimized;
-            tlContent.style.display = isMinimized ? "none" : "flex";
-            minimizeBtn.innerHTML = isMinimized ? "\u25FB" : "\u2212";
-            tlOverlay.style.bottom = isMinimized ? "10px" : "100px";
-            tlOverlay.style.width = isMinimized ? "250px" : "650px";
-        });
-
-        scope.add(document.getElementById("bsPrevDayBtn"), "click", () => {
-            currentBaseDate = new Date(currentBaseDate.getTime() - 24 * 60 * 60000);
-            updateDateDisplay();
-        });
-
-        scope.add(document.getElementById("bsNextDayBtn"), "click", () => {
-            currentBaseDate = new Date(currentBaseDate.getTime() + 24 * 60 * 60000);
-            updateDateDisplay();
-        });
+        // scope.add(document.getElementById("bsPrevDayBtn"), "click", () => {
+        //     currentBaseDate = new Date(currentBaseDate.getTime() - 24 * 60 * 60000);
+        //     updateDateDisplay();
+        // });
+        // 
+        // scope.add(document.getElementById("bsNextDayBtn"), "click", () => {
+        //     currentBaseDate = new Date(currentBaseDate.getTime() + 24 * 60 * 60000);
+        //     updateDateDisplay();
+        // });
 
         siteButtons.forEach(btn => {
             scope.add(btn, "click", (e) => {
@@ -1649,6 +1668,7 @@ export default {
                 });
                 appState.selectedArea = null;
                 updateSelectedAreaVisual(null);
+                exitAreaFocusMode();
                 clearGridVisuals(ctx.shared.viewer);
                 triggerRecalculate();
                 setStatus(`Monitoring ${focusedSite.name}...`);
@@ -1665,6 +1685,10 @@ export default {
         });
 
         scope.add(document.getElementById("bsRecalculateBtn"), "click", () => {
+            if (appState.analysisInFlight) {
+                setStatus("Error: An analysis is already in progress.");
+                return;
+            }
             cbGroup.forEach(cb => {
                 const idx = cb.dataset.index;
                 SATELLITE_GROUPS[idx].selected = cb.checked;
@@ -1736,55 +1760,55 @@ export default {
             setStatus("CSV schedule exported successfully.");
         });
 
-        const playBtn = document.getElementById("bsPlayPauseBtn");
-        const fastBtn = document.getElementById("bsFastBtn");
-        const liveBtn = document.getElementById("bsLiveBtn");
-
-        scope.add(playBtn, "click", () => {
-            appState.realTimeMultiplier = (appState.realTimeMultiplier === 0) ? 1 : 0;
-            playBtn.textContent = (appState.realTimeMultiplier === 0) ? "Play" : "Pause";
-        });
-
-        scope.add(fastBtn, "click", () => {
-            appState.realTimeMultiplier = 3600;
-            playBtn.textContent = "Pause";
-        });
-
-        scope.add(liveBtn, "click", () => {
-            appState.realTimeClock = new Date();
-            appState.realTimeMultiplier = 1;
-            playBtn.textContent = "Pause";
-            currentBaseDate = new Date();
-            currentBaseDate.setUTCHours(0,0,0,0);
-            updateDateDisplay();
-        });
-
-        scope.add(scrubber, "input", (e) => {
-            const seconds = Number(e.target.value);
-            const midnight = new Date(appState.realTimeClock);
-            midnight.setUTCHours(0,0,0,0);
-            appState.realTimeClock = new Date(midnight.getTime() + seconds * 1000);
-            // Refresh visuals instantly during scrubbing
-            const clock = appState.realTimeClock || new Date();
-            const hasBlindSpots = lastBlindSpotSchedule.length > 0;
-            updateSiteVisuals(clock, currentSatrecs, ctx.shared.viewer, focusedSite, sensorConeAngleDeg, hasBlindSpots);
-            updateTracedAreaVisual(clock, currentSatrecs, ctx.shared.viewer, focusedSite, sensorConeAngleDeg, hasBlindSpots);
-        });
-
-        scope.add(scrubber, "mousedown", () => {
-            appState._prevMultiplier = appState.realTimeMultiplier;
-            appState.realTimeMultiplier = 0;
-        });
-
-        scope.add(scrubber, "mouseup", () => {
-            appState.realTimeMultiplier = appState._prevMultiplier !== undefined ? appState._prevMultiplier : 1;
-            playBtn.textContent = (appState.realTimeMultiplier === 0) ? "Play" : "Pause";
-        });
+        // const playBtn = document.getElementById("bsPlayPauseBtn");
+        // const fastBtn = document.getElementById("bsFastBtn");
+        // const liveBtn = document.getElementById("bsLiveBtn");
+        // 
+        // scope.add(playBtn, "click", () => {
+        //     appState.realTimeMultiplier = (appState.realTimeMultiplier === 0) ? 1 : 0;
+        //     playBtn.textContent = (appState.realTimeMultiplier === 0) ? "Play" : "Pause";
+        // });
+        // 
+        // scope.add(fastBtn, "click", () => {
+        //     appState.realTimeMultiplier = 3600;
+        //     playBtn.textContent = "Pause";
+        // });
+        // 
+        // scope.add(liveBtn, "click", () => {
+        //     appState.realTimeClock = new Date();
+        //     appState.realTimeMultiplier = 1;
+        //     playBtn.textContent = "Pause";
+        //     currentBaseDate = new Date();
+        //     currentBaseDate.setUTCHours(0,0,0,0);
+        //     updateDateDisplay();
+        // });
+        // 
+        // scope.add(scrubber, "input", (e) => {
+        //     const seconds = Number(e.target.value);
+        //     const midnight = new Date(appState.realTimeClock);
+        //     midnight.setUTCHours(0,0,0,0);
+        //     appState.realTimeClock = new Date(midnight.getTime() + seconds * 1000);
+        //     // Refresh visuals instantly during scrubbing
+        //     const clock = appState.realTimeClock || new Date();
+        //     const hasBlindSpots = lastBlindSpotSchedule.length > 0;
+        //     updateSiteVisuals(clock, currentSatrecs, ctx.shared.viewer, focusedSite, sensorConeAngleDeg, hasBlindSpots);
+        //     updateTracedAreaVisual(clock, currentSatrecs, ctx.shared.viewer, focusedSite, sensorConeAngleDeg, hasBlindSpots);
+        // });
+        // 
+        // scope.add(scrubber, "mousedown", () => {
+        //     appState._prevMultiplier = appState.realTimeMultiplier;
+        //     appState.realTimeMultiplier = 0;
+        // });
+        // 
+        // scope.add(scrubber, "mouseup", () => {
+        //     appState.realTimeMultiplier = appState._prevMultiplier !== undefined ? appState._prevMultiplier : 1;
+        //     playBtn.textContent = (appState.realTimeMultiplier === 0) ? "Play" : "Pause";
+        // });
 
         scope.addCleanup(eventBus.on(events.areaSelected, () => {
             focusedSite = null;
             clearGridVisuals(ctx.shared.viewer);
-            triggerRecalculate();
+            // triggerRecalculate(); // Do not auto-run
         }));
 
         return {
@@ -1793,6 +1817,7 @@ export default {
                 if (tlContainer) tlContainer.innerHTML = "";
                 clearVisuals(ctx.shared.viewer);
                 updateSelectedAreaVisual(null);
+                exitAreaFocusMode();
                 appState.realTimeMultiplier = 1;
             }
         };

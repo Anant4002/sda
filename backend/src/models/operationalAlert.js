@@ -1,5 +1,36 @@
-const { DataTypes } = require("sequelize");
+const { DataTypes, Op } = require("sequelize");
 const { sequelize } = require("../db");
+
+async function deleteCorrelationChildren(where, transaction) {
+    const { AlertCorrelation } = require("./alertCorrelation");
+    const { IncidentEventLink } = require("./incidentEventLink");
+
+    const alerts = await OperationalAlert.findAll({
+        where,
+        attributes: ["id"],
+        raw: true,
+        transaction
+    });
+
+    const alertIds = alerts.map((alert) => alert.id).filter((id) => Number.isFinite(Number(id)));
+    if (!alertIds.length) {
+        return;
+    }
+
+    await IncidentEventLink.destroy({
+        where: {
+            alertId: { [Op.in]: alertIds }
+        },
+        transaction
+    });
+
+    await AlertCorrelation.destroy({
+        where: {
+            alertId: { [Op.in]: alertIds }
+        },
+        transaction
+    });
+}
 
 const OperationalAlert = sequelize.define("OperationalAlert", {
     eventKey: {
@@ -77,7 +108,12 @@ const OperationalAlert = sequelize.define("OperationalAlert", {
     }
 }, {
     tableName: "operational_alerts",
-    timestamps: true
+    timestamps: true,
+    hooks: {
+        beforeBulkDestroy: async (options) => {
+            await deleteCorrelationChildren(options.where || {}, options.transaction || null);
+        }
+    }
 });
 
 module.exports = {

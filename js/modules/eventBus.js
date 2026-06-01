@@ -40,6 +40,7 @@ export const events = {
     catalogReady: "catalog:ready",
     catalogStatusUpdated: "catalog:statusUpdated",
     alertsUpdated: "alerts:updated",
+    threatInsightsUpdated: "threatInsights:updated",
     areaSelected: "area:selected",
     areaCleared: "area:cleared",
     traceModeChanged: "trace:modeChanged",

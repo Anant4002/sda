@@ -61,9 +61,14 @@ export default {
         const offCleared = eventBus.on(events.satelliteCleared, updateSelection);
 
         scope.add(runButton, "click", async () => {
+            if (appState.analysisInFlight) {
+                setStatus("Error: An analysis is already in progress.");
+                return;
+            }
             const satelliteId = appState.activeSatellitePathId;
             if (!satelliteId) return;
 
+            appState.analysisInFlight = true;
             runButton.disabled = true;
             runButton.textContent = "Simulating Re-entry...";
             setStatus(`Running high-fidelity re-entry simulation for ${satelliteId}...`);
@@ -89,6 +94,7 @@ export default {
                 }
                 setStatus("Re-entry simulation failed.");
             } finally {
+                appState.analysisInFlight = false;
                 runButton.disabled = false;
                 runButton.textContent = "Run Re-entry Predictor";
             }

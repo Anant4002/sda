@@ -91,6 +91,100 @@
             background: rgba(255, 255, 255, 0.14);
         }
 
+        .help-toggle {
+            min-width: 44px;
+            padding: 8px 12px;
+            font-size: 14px;
+            font-weight: 800;
+            line-height: 1;
+            border-radius: 999px;
+            background: rgba(111, 226, 255, 0.12);
+            border: 1px solid rgba(111, 226, 255, 0.35);
+            color: var(--accent);
+        }
+
+        .help-toggle:hover {
+            background: rgba(111, 226, 255, 0.2);
+        }
+
+        #moduleHelpBackdrop {
+            position: fixed;
+            inset: 0;
+            display: none;
+            z-index: 18;
+            background: rgba(2, 8, 20, 0.45);
+            backdrop-filter: blur(2px);
+        }
+
+        #moduleHelpBackdrop.is-open {
+            display: block;
+        }
+
+        #moduleHelpPanel {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: min(720px, calc(100vw - 40px));
+            max-height: calc(100vh - 80px);
+            display: none;
+            z-index: 19;
+            padding: 18px;
+            overflow-y: auto;
+        }
+
+        #moduleHelpPanel.is-open {
+            display: block;
+        }
+
+        .help-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .help-panel-header h2 {
+            margin: 4px 0 0;
+            font-size: 22px;
+        }
+
+        .help-panel-close {
+            min-width: 44px;
+            padding: 8px 12px;
+        }
+
+        .help-guide {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .help-section {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .help-section-title {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--accent);
+        }
+
+        .help-list {
+            margin: 0;
+            padding-left: 18px;
+            color: var(--text-main);
+        }
+
+        .help-list li {
+            margin-bottom: 6px;
+            line-height: 1.45;
+        }
+
         #controlsPanel {
             top: 20px;
             left: 20px;
@@ -778,6 +872,7 @@
 </head>
 <body>
     <div id="cesiumContainer"></div>
+    <div id="moduleHelpBackdrop" aria-hidden="true"></div>
 
     <button id="globeRotationToggle" title="Toggle Earth Rotation">
         <svg viewBox="0 0 24 24">
@@ -793,7 +888,10 @@
                 <h1 id="moduleTitle">Modular Operations Console</h1>
                 <p id="moduleSubtitle">Select a module from the bottom dock to begin.</p>
             </div>
-            <button id="controlsToggle" class="panel-toggle" type="button" aria-expanded="true" aria-controls="controlsContent">Minimize</button>
+            <div style="display:flex; gap:8px; align-items:flex-start;">
+                <button id="moduleHelpToggle" class="panel-toggle help-toggle" type="button" aria-haspopup="dialog" aria-expanded="false" title="Open module help">?</button>
+                <button id="controlsToggle" class="panel-toggle" type="button" aria-expanded="true" aria-controls="controlsContent">Minimize</button>
+            </div>
         </div>
 
         <div id="controlsContent">
@@ -806,6 +904,17 @@
         <div class="eyebrow">Analysis</div>
         <h2>Selection Required</h2>
         <p class="hint">Trace a region on the globe to analyze it, or click a satellite to toggle its one-orbit future path.</p>
+    </div>
+
+    <div id="moduleHelpPanel" class="panel" aria-hidden="true">
+        <div class="help-panel-header">
+            <div>
+                <div class="eyebrow">Module Guide</div>
+                <h2 id="moduleHelpTitle">How to use this module</h2>
+            </div>
+            <button id="moduleHelpClose" class="panel-toggle help-panel-close" type="button" aria-label="Close help">Close</button>
+        </div>
+        <div id="moduleHelpBody"></div>
     </div>
 
     <div id="hoverPanel">Hover on a satellite</div>

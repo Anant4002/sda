@@ -7,6 +7,8 @@ const { sequelize } = require("../backend/src/db");
 const { Satellite } = require("../backend/src/models/satellite");
 const { SatelliteCatalogVersion } = require("../backend/src/models/satelliteCatalogVersion");
 const { CatalogEvent } = require("../backend/src/models/catalogEvent");
+const { CatalogSyncRun } = require("../backend/src/models/catalogSyncRun");
+const { CatalogSyncNewSatellite } = require("../backend/src/models/catalogSyncNewSatellite");
 
 const sampleCatalog = [ 
     "ISS (ZARYA)",
@@ -45,6 +47,8 @@ test("syncSatellites records a catalog version and audit event", async () => {
     const originalBulkCreate = Satellite.bulkCreate;
     const originalVersionCreate = SatelliteCatalogVersion.create;
     const originalEventCreate = CatalogEvent.create;
+    const originalSyncRunCreate = CatalogSyncRun.create;
+    const originalNewSatelliteBulkCreate = CatalogSyncNewSatellite.bulkCreate;
 
     const sampleBatch = parseTleCatalog(sampleCatalog);
     const createCalls = [];
@@ -63,6 +67,10 @@ test("syncSatellites records a catalog version and audit event", async () => {
         eventCalls.push(payload);
         return payload;
     };
+    CatalogSyncRun.create = async (payload) => {
+        return { id: 1, ...payload };
+    };
+    CatalogSyncNewSatellite.bulkCreate = async () => undefined;
 
     try {
         const syncedCount = await syncSatellites();
@@ -81,5 +89,7 @@ test("syncSatellites records a catalog version and audit event", async () => {
         Satellite.bulkCreate = originalBulkCreate;
         SatelliteCatalogVersion.create = originalVersionCreate;
         CatalogEvent.create = originalEventCreate;
+        CatalogSyncRun.create = originalSyncRunCreate;
+        CatalogSyncNewSatellite.bulkCreate = originalNewSatelliteBulkCreate;
     }
 });

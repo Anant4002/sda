@@ -76,9 +76,19 @@ function analyzeNeighbourhoodWatchFromRecords(records, satelliteId, startTime, t
 
             alerts.push({
                 primaryId: primaryRecord.id,
+                primaryName: primaryRecord.name || primaryRecord.id,
+                primaryNoradId: primaryRecord.noradId || null,
+                primaryIsIndian: Boolean(primaryRecord.isIndian),
                 secondaryId: nearbyRecord.id,
+                secondaryName: nearbyRecord.name || nearbyRecord.id,
+                secondaryNoradId: nearbyRecord.noradId || null,
+                secondaryIsIndian: Boolean(nearbyRecord.isIndian),
                 closestDistanceKm: distanceKm,
                 relativeVelocityKmS,
+                observationWindow: {
+                    start: startDate.toISOString(),
+                    end: startDate.toISOString()
+                },
                 time: startDate.toISOString(),
                 severity,
                 // Include positions for globe markers

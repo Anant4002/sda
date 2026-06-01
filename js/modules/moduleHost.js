@@ -4,6 +4,7 @@ import { eventBus, events } from "./eventBus.js";
 
 let activeModuleId = null;
 let activeInstance = null;
+let activeDefinition = null;
 let context = null;
 
 function ensureContext() {
@@ -22,6 +23,10 @@ export const moduleHost = {
 
     getActiveModuleId() {
         return activeModuleId;
+    },
+
+    getActiveModuleDefinition() {
+        return activeDefinition;
     },
 
     async activate(moduleId) {
@@ -45,6 +50,7 @@ export const moduleHost = {
             const instance = await definition.mount(context) || {};
             activeInstance = instance;
             activeModuleId = moduleId;
+            activeDefinition = definition;
             eventBus.emit(events.moduleActivated, { id: moduleId, definition });
             return true;
         } catch (error) {
@@ -71,6 +77,7 @@ export const moduleHost = {
         }
         activeInstance = null;
         activeModuleId = null;
+        activeDefinition = null;
         this.clearSidebar();
         this.clearAnalysisPanel();
     },
@@ -83,6 +90,10 @@ export const moduleHost = {
         // 1. Exit focus mode and restore catalog visibility
         if (typeof shared.exitFocusedAnalysisMode === "function") {
             shared.exitFocusedAnalysisMode();
+        }
+
+        if (typeof shared.exitAreaFocusMode === "function") {
+            shared.exitAreaFocusMode();
         }
         
         // 2. Clear any predicted paths or manoeuvre lines
@@ -127,6 +138,7 @@ export const moduleHost = {
         }
         activeModuleId = definition.id;
         activeInstance = null;
+        activeDefinition = definition;
         eventBus.emit(events.moduleActivated, { id: definition.id, definition });
     },
 

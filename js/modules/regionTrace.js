@@ -3,6 +3,8 @@ import { computeBounds } from "../utils.js";
 import {
     clearPathEntities,
     clearTraceDraftVisual,
+    enterAreaFocusMode,
+    exitAreaFocusMode,
     updateSelectedAreaVisual,
     updateTraceDraftVisual
 } from "../viewer.js";
@@ -59,6 +61,7 @@ export function startTraceMode() {
     appState.tracePoints = [];
     appState.tracePreviewPoint = null;
     appState.selectedArea = null;
+    exitAreaFocusMode();
     clearPathEntities();
     updateSelectedAreaVisual(null);
     clearTraceDraftVisual();
@@ -95,6 +98,7 @@ export function finalizeTraceSelection() {
     appState.tracePreviewPoint = null;
     clearTraceDraftVisual();
     updateSelectedAreaVisual(appState.selectedArea);
+    enterAreaFocusMode([]);
     stopTraceMode(false);
     eventBus.emit(events.areaSelected, appState.selectedArea);
     return true;
@@ -110,6 +114,7 @@ export function clearSelection() {
     clearTraceDraftVisual();
     updateSelectedAreaVisual(appState.selectedArea);
     updateCollisionAlert();
+    exitAreaFocusMode();
     stopTraceMode(false);
     updateAreaReadout();
     setStatus("Selection cleared.");

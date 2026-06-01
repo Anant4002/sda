@@ -886,6 +886,30 @@ export function exitFocusedAnalysisMode() {
     });
 }
 
+function normalizeSatelliteIdSet(satelliteIds) {
+    if (satelliteIds instanceof Set) {
+        return new Set([...satelliteIds].map((id) => String(id)));
+    }
+
+    if (!Array.isArray(satelliteIds)) {
+        return new Set();
+    }
+
+    return new Set(satelliteIds.filter((id) => id !== null && id !== undefined).map((id) => String(id)));
+}
+
+export function enterAreaFocusMode(satelliteIds = []) {
+    appState.isAreaFocusMode = true;
+    appState.areaFocusSatelliteIds = normalizeSatelliteIdSet(satelliteIds);
+    viewer.scene.requestRender();
+}
+
+export function exitAreaFocusMode() {
+    appState.isAreaFocusMode = false;
+    appState.areaFocusSatelliteIds = new Set();
+    viewer.scene.requestRender();
+}
+
 export function setInertialView(enabled) {
     appState.isInertialViewEnabled = true;
     viewer.scene.skyBox.show = true;

@@ -57,10 +57,12 @@ async function ingestSensorTrack(trackData) {
     // 4. Instant Threat Alerting (Proposal Requirement 3)
     if (result.threatLevel !== "NON-THREAT") {
         await recordOperationalAlert({
+            alertType: "rapid_threat",
             title: `Rapid Threat Detected: ${result.type}`,
             severity: result.threatLevel.toLowerCase(),
             message: result.threatMessage,
             primaryId: result.id,
+            primaryObjectName: result.id,
             occurredAt: result.timestamp,
             details: result
         });

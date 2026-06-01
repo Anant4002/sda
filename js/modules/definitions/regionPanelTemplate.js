@@ -65,6 +65,10 @@ export function attachRegionTracingControls(scope, { onAnalyze }) {
     });
 
     scope.add(analyzeButton, "click", () => {
+        if (appState.analysisInFlight) {
+            setStatus("Error: An analysis is already in progress.");
+            return;
+        }
         if (appState.isTraceModeEnabled && appState.tracePoints.length >= 3) {
             finalizeTraceSelection();
             // Fall through to run analysis immediately after finalizing

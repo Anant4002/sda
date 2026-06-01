@@ -4,6 +4,8 @@ const { sequelize } = require("../db");
 const { catalogSource, tleSourceUrl } = require("../config");
 const { SatelliteCatalogVersion } = require("../models/satelliteCatalogVersion");
 const { CatalogEvent } = require("../models/catalogEvent");
+const { CatalogSyncRun } = require("../models/catalogSyncRun");
+const { CatalogSyncNewSatellite } = require("../models/catalogSyncNewSatellite");
 const { clearSatelliteCatalogCache } = require("./satelliteCatalogService");
 const { serializeSatellite, isIndianSatelliteName } = require("./satelliteMetadataService");
 const { evaluateCatalogManoeuvres } = require("./manoeuvreDetectionService");
@@ -88,6 +90,7 @@ async function recordCatalogVersion(satellites, transaction, options = {}) {
 }
 
 async function syncSatellites() {
+    const startedAt = new Date();
     try {
         console.log("Fetching TLE data from CelesTrak...");
         let satelliteBatch;
@@ -105,6 +108,15 @@ async function syncSatellites() {
                         status: "baseline",
                         errorMessage: "Source returned 403 (Rate limited or No Update)" 
                     });
+
+                    // Record a sync run with 0 new satellites to update the verification timestamp
+                    await CatalogSyncRun.create({
+                        startedAt,
+                        completedAt: new Date(),
+                        totalBefore: existingSats.length,
+                        totalAfter: existingSats.length,
+                        newSatellitesFound: 0
+                    }, { transaction });
                 });
                 const count = await Satellite.count();
                 return count;
@@ -144,8 +156,11 @@ async function syncSatellites() {
                 sequelizeOptions: { transaction }
             });
 
-            const existingNames = new Set(existingRows.map(row => row.name));
-            const newSatellites = satelliteBatch.filter(s => !existingNames.has(s.name));
+            // Compare incoming NORAD IDs against satellites already stored in the database
+            const existingNoradIds = new Set(
+                existingRows.map(row => row.noradId).filter(id => id !== null && id !== undefined)
+            );
+            const newSatellites = satelliteBatch.filter(s => s.noradId && !existingNoradIds.has(s.noradId));
             
             console.log(`Found ${newSatellites.length} new satellites to insert out of ${satelliteBatch.length} fetched TLEs.`);
 
@@ -156,7 +171,7 @@ async function syncSatellites() {
                     dataSource: "CELESTRAK",
                     catalogStatus: "CORRELATED",
                     isIndigenous: false,
-                    firstAddedAt: syncedAt
+                    firstAddedAt: startedAt
                 };
             });
 
@@ -166,6 +181,27 @@ async function syncSatellites() {
             console.log("Satellite records updated. Recording version...");
             const version = await recordCatalogVersion(satelliteBatch, transaction, { syncedAt });
             versionId = version.id;
+
+            // Create a sync run record
+            const syncRun = await CatalogSyncRun.create({
+                startedAt,
+                completedAt: new Date(),
+                totalBefore: existingRows.length,
+                totalAfter: existingRows.length + newSatellites.length,
+                newSatellitesFound: newSatellites.length
+            }, { transaction });
+
+            // Store every newly detected NORAD ID
+            if (newSatellites.length > 0) {
+                await CatalogSyncNewSatellite.bulkCreate(
+                    newSatellites.map(s => ({
+                        syncRunId: syncRun.id,
+                        noradId: s.noradId,
+                        detectedAt: startedAt
+                    })),
+                    { transaction }
+                );
+            }
         });
 
         // Step 2: Historical Persistence (Separate, optimized bulk)

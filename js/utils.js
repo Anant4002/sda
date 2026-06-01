@@ -100,6 +100,13 @@ export function isCommercialSatelliteName(name) {
     return COMMERCIAL_SATELLITE_NAME_REGEX.test(String(name || ""));
 }
 
+const THREAT_SATELLITE_NAME_REGEX = /YAOGAN|FENGYUN|SJ-|SHIYAN|BEIDOU/i;
+
+export function isThreatSatellite(satellite) {
+    const name = String(satellite?.name || "").toUpperCase();
+    return THREAT_SATELLITE_NAME_REGEX.test(name);
+}
+
 export function computeBounds(points) {
     return points.reduce((bounds, point) => ({
         minLat: Math.min(bounds.minLat, point.lat),

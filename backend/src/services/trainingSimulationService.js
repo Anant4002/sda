@@ -3,6 +3,7 @@ const { TrainingSession } = require("../models/trainingSession");
 const { OperationalAlert } = require("../models/operationalAlert");
 const { recordOperationalAlert } = require("./operationalAlertService");
 const { Op } = require("sequelize");
+const { ingestOperationalAlerts } = require("./correlationEngineService");
 
 async function listScenarios() {
     return TrainingScenario.findAll();
@@ -83,6 +84,13 @@ async function injectSimulatedAlert(sessionId, alertData) {
     return OperationalAlert.create({
         ...alert,
         eventKey: simEventKey
+    }).then(async (created) => {
+        await ingestOperationalAlerts([created.get({ plain: true })], {
+            sourceName: "Training Simulator",
+            sourceType: "simulation",
+            alertType: created.alertType || "generic"
+        });
+        return created;
     });
 }
 
@@ -130,6 +138,11 @@ async function loadHistoricalReplay(sessionId, startTime, endTime, filter = {}) 
             trainingSessionId: session.id,
             sourceType: "replay",
             sourceName: `Replay: ${alert.sourceName || "System"}`
+        });
+        await ingestOperationalAlerts([newAlert.get({ plain: true })], {
+            sourceName: `Replay: ${alert.sourceName || "System"}`,
+            sourceType: "replay",
+            alertType: newAlert.alertType || "generic"
         });
         replayedAlerts.push(newAlert);
     }
