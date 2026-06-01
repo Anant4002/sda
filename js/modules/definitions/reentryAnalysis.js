@@ -1,9 +1,10 @@
 import { appState } from "../../state.js";
-import { setStatus, renderReentryIntelligence } from "../../ui.js";
+import { setStatus, renderReentryIntelligence, renderAnalysisLoader } from "../../ui.js";
 import { escapeHtml, formatNumber, formatDateTime } from "../../utils.js";
 import { ListenerScope } from "../../ui/panelSystem.js";
 import { eventBus, events } from "../eventBus.js";
 import { drawReentrySimulation, clearReentrySimulation } from "../../viewer.js";
+import { elements } from "../../dom.js";
 
 function buildSidebar() {
     return `
@@ -23,10 +24,6 @@ function buildSidebar() {
             </div>
             <button id="reentryRunButton" class="primary" style="margin-top:12px;" disabled type="button">Run Re-entry Predictor</button>
         </div>
-        <div id="reentryResultContainer" class="section" style="display:none;">
-            <div class="section-title">Prediction Output</div>
-            <div id="reentryReadout" class="readout"></div>
-        </div>
     `;
 }
 
@@ -44,8 +41,6 @@ export default {
 
         const selectionStatus = document.getElementById("reentrySelectionStatus");
         const runButton = document.getElementById("reentryRunButton");
-        const resultContainer = document.getElementById("reentryResultContainer");
-        const readout = document.getElementById("reentryReadout");
 
         const scope = new ListenerScope();
 
@@ -69,10 +64,10 @@ export default {
             const satelliteId = appState.activeSatellitePathId;
             if (!satelliteId) return;
 
-            resultContainer.style.display = "none";
             runButton.disabled = true;
             runButton.textContent = "Simulating Re-entry...";
             setStatus(`Running high-fidelity re-entry simulation for ${satelliteId}...`);
+            renderAnalysisLoader("Re-entry Drag Forecast", "Running high-fidelity drag-based decay simulation and checking tactical installations...");
 
             try {
                 const { payload } = await ctx.shared.postJsonWithFallback("/api/analysis/reentry-prediction", {
@@ -80,66 +75,18 @@ export default {
                     limit: 100
                 });
 
-                resultContainer.style.display = "block";
-                
-                const getRiskClass = (level) => {
-                    const l = (level || "LOW").toUpperCase();
-                    if (l === "HIGH") return "danger";
-                    if (l === "ELEVATED") return "warning";
-                    if (l === "MONITOR") return "monitor";
-                    return "success";
-                };
-
-                const riskClass = getRiskClass(payload.riskLevel);
-                const hasStrategicRisk = payload.strategicRisks && payload.strategicRisks.length > 0;
-                
-                readout.innerHTML = `
-                    <div class="list-item ${riskClass}" style="line-height: 1.5;">
-                        <div style="margin-bottom: 8px;">
-                            <span style="color: var(--text-dim);">Impact Window:</span><br>
-                            <strong>${payload.status === "stable" ? "Stable (No Risk)" : (payload.estimatedReentryDate ? formatDateTime(payload.estimatedReentryDate).split(',')[0] : "N/A")}</strong>
-                        </div>
-
-                        <div style="margin-bottom: 8px;">
-                            <span style="color: var(--text-dim);">Estimated Time Remaining:</span><br>
-                            <strong style="color: var(--severity-danger); font-size: 1.2em;">${payload.timeToImpact || "N/A"}</strong>
-                        </div>
-
-                        <div style="margin-bottom: 8px;">
-                            <span style="color: var(--text-dim);">India-Specific Assessment:</span><br>
-                            <strong style="color: ${payload.strategicRisks?.length > 0 ? 'var(--severity-danger)' : 'inherit'};">
-                                ${payload.indiaSpecificRisk || "Scanning corridor..."}
-                            </strong>
-                        </div>
-                        
-                        <div style="margin-bottom: 8px;">
-                            <span style="color: var(--text-dim);">Perigee:</span><br>
-                            <strong>${payload.currentPerigeeKm ? formatNumber(payload.currentPerigeeKm, 1) + " km" : "N/A"}</strong>
-                        </div>
-
-                        <div style="margin-bottom: 8px;">
-                            <span style="color: var(--text-dim);">Risk Level:</span><br>
-                            <span class="badge badge-${riskClass}">${escapeHtml(payload.riskLevel || "LOW")}</span>
-                        </div>
-
-                        <div style="margin-bottom: 8px;">
-                            <span style="color: var(--text-dim);">Simulation Info:</span><br>
-                            <small>${escapeHtml(payload.message)}</small>
-                        </div>
-                    </div>
-                `;
-
                 // Render on 3D Globe
                 drawReentrySimulation(payload);
 
-                // Render detailed report
+                // Render detailed report in Right Command & Control Panel
                 renderReentryIntelligence(payload);
                 
                 setStatus(`Re-entry simulation complete for ${satelliteId}.`);
                 await ctx.shared.refreshOperationalAlerts();
             } catch (error) {
-                readout.innerHTML = `<div class="list-item danger"><strong>Error:</strong> ${escapeHtml(error.message)}</div>`;
-                resultContainer.style.display = "block";
+                if (elements.analysisPanel) {
+                    elements.analysisPanel.innerHTML = `<div class="list-item danger"><strong>Error:</strong> ${escapeHtml(error.message)}</div>`;
+                }
                 setStatus("Re-entry simulation failed.");
             } finally {
                 runButton.disabled = false;

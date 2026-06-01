@@ -5,7 +5,7 @@ const { Satellite } = require("../backend/src/models/satellite");
 const { ingestTrackObservation } = require("../backend/src/services/satelliteCatalogService");
 
 test("ingestTrackObservation correlates against existing catalog", async () => {
-    await sequelize.sync();
+    await sequelize.sync({ alter: true });
 
     // 1. Create a "Known" satellite
     const knownSat = await Satellite.create({

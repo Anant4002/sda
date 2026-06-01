@@ -13,7 +13,7 @@ const {
 } = require("../backend/src/services/satelliteCatalogService");
 
 test("catalog status and history helpers return plain JSON records", async () => {
-    await sequelize.sync();
+    await sequelize.sync({ alter: true });
 
     await CatalogEvent.destroy({ where: {} });
     await SatelliteCatalogVersion.destroy({ where: {} });
@@ -59,7 +59,7 @@ test("catalog status and history helpers return plain JSON records", async () =>
 });
 
 test("seedCatalogHistoryIfMissing creates a baseline snapshot when history is empty", async () => {
-    await sequelize.sync();
+    await sequelize.sync({ alter: true });
     await CatalogEvent.destroy({ where: {} });
     await SatelliteCatalogVersion.destroy({ where: {} });
 
@@ -78,7 +78,7 @@ test("seedCatalogHistoryIfMissing creates a baseline snapshot when history is em
 });
 
 test("updateSatelliteIntData finds satellite by name", async () => {
-    await sequelize.sync();
+    await sequelize.sync({ alter: true });
     
     const satName = "TEST-SAT-123 (POC)";
     const sat = await Satellite.create({
@@ -103,7 +103,7 @@ test("updateSatelliteIntData finds satellite by name", async () => {
 });
 
 test("updateSatelliteIntData finds satellite by numeric ID", async () => {
-    await sequelize.sync();
+    await sequelize.sync({ alter: true });
     
     const sat = await Satellite.create({
         name: "TEST-SAT-456",

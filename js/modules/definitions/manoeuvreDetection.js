@@ -1,5 +1,5 @@
 import { appState } from "../../state.js";
-import { setStatus } from "../../ui.js";
+import { setStatus, renderAnalysisLoader } from "../../ui.js";
 import { escapeHtml } from "../../utils.js";
 import { 
     fetchBackendManoeuvreDetection, 
@@ -7,60 +7,29 @@ import {
 } from "../../analysisService.js";
 import { ListenerScope } from "../../ui/panelSystem.js";
 import { eventBus, events } from "../eventBus.js";
+import { elements } from "../../dom.js";
+import { updateSelectedAreaVisual } from "../../viewer.js";
 
-const REGIONAL_ACCESS_PRESETS = {
-    delhi: {
-        name: "Delhi",
-        points: [
-            { lat: 28.20, lon: 76.85 },
-            { lat: 28.20, lon: 77.45 },
-            { lat: 28.95, lon: 77.45 },
-            { lat: 28.95, lon: 76.85 }
-        ]
-    },
-    pokhran: {
-        name: "Pokhran",
-        points: [
-            { lat: 26.90, lon: 71.45 },
-            { lat: 26.90, lon: 71.95 },
-            { lat: 27.40, lon: 71.95 },
-            { lat: 27.40, lon: 71.45 }
-        ]
-    },
-    siachen: {
-        name: "Siachen",
-        points: [
-            { lat: 34.85, lon: 74.95 },
-            { lat: 34.85, lon: 75.55 },
-            { lat: 35.35, lon: 75.55 },
-            { lat: 35.35, lon: 74.95 }
-        ]
+function generateCirclePoints(centroid, radiusKm) {
+    const points = [];
+    const earthRadius = 6371;
+    const latRad = centroid.lat * Math.PI / 180;
+    const lonRad = centroid.lon * Math.PI / 180;
+    const dR = radiusKm / earthRadius;
+
+    for (let i = 0; i < 360; i += 11.25) {
+        const angle = i * Math.PI / 180;
+        const outLatRad = Math.asin(Math.sin(latRad) * Math.cos(dR) + Math.cos(latRad) * Math.sin(dR) * Math.cos(angle));
+        const outLonRad = lonRad + Math.atan2(Math.sin(angle) * Math.sin(dR) * Math.cos(latRad), Math.cos(dR) - Math.sin(latRad) * Math.sin(outLatRad));
+        points.push({
+            lat: outLatRad * 180 / Math.PI,
+            lon: outLonRad * 180 / Math.PI
+        });
     }
-};
-
-function cloneArea(area) {
-    if (!area) {
-        return null;
-    }
-
-    return {
-        ...area,
-        points: Array.isArray(area.points) ? area.points.map((point) => ({ ...point })) : []
-    };
+    return points;
 }
 
-function resolveRegionalPresenceArea(selectionKey) {
-    if (selectionKey === "current" && appState.selectedArea) {
-        return cloneArea(appState.selectedArea);
-    }
 
-    if (selectionKey === "current") {
-        return null;
-    }
-
-    const preset = REGIONAL_ACCESS_PRESETS[selectionKey] || REGIONAL_ACCESS_PRESETS.delhi;
-    return cloneArea(preset);
-}
 
 function humanizeTrend(trend) {
     if (trend === "new_access") {
@@ -152,21 +121,6 @@ function buildSidebar() {
                 </div>
 
                 <button id="driftExitFocusButton" class="secondary" type="button" style="width: 100%; margin-bottom: 12px; display: none;">Exit Focus Mode</button>
-
-        <div id="driftIntelligence" class="micro-card" style="display: none; margin-bottom: 12px; border-left: 2px solid var(--text-success); background: rgba(124, 242, 154, 0.05);">
-                    <div style="font-size: 0.85em; font-weight: bold; margin-bottom: 6px; color: var(--text-success);">Drift Intelligence Analysis</div>
-                    <div id="driftIntelligenceContent" style="font-size: 0.9em; line-height: 1.4; color: var(--text-main);"></div>
-                </div>
-
-                <div id="driftMetrics" class="micro-card" style="display: none; margin-bottom: 12px; border-left: 2px solid var(--text-accent);">
-                    <div style="font-size: 0.85em; font-weight: bold; margin-bottom: 6px;">Drift Metrics</div>
-                    <div id="driftMetricsContent" style="display: flex; flex-direction: column; gap: 6px; font-family: var(--font-mono); font-size: 0.85em;"></div>
-                </div>
-
-                <div id="driftLegend" class="micro-card" style="display: none; margin-bottom: 12px;">
-                    <div style="font-size: 0.85em; font-weight: bold; margin-bottom: 6px;">Temporal Overlay</div>
-                    <div id="driftLegendItems" style="display: flex; align-items: center; gap: 4px; overflow-x: auto; padding-bottom: 4px;"></div>
-                </div>
             </div>
         </div>
 
@@ -182,32 +136,27 @@ function buildSidebar() {
                 </div>
                 <button id="manoeuvreAnalyzeButton" class="primary" type="button" style="width: 100%; margin-bottom: 12px;">Analyze Target Manoeuvre</button>
             </div>
-            
-            <div id="manoeuvreEventLog" style="display: none;">
-                <div class="section-title">Manoeuvre Event Log</div>
-                <div id="manoeuvreLogContent" class="list"></div>
-            </div>
         </div>
 
         <div class="section">
             <div class="section-title">Emerging Regional Access</div>
             <div id="regionalPresenceNotice" class="micro-card warning" style="margin-bottom: 12px;">
-                Compare an earlier and recent visibility window to spot satellites that newly enter a strategic region.
+                Search a strategic region and select a window to scan for emerging accesses.
             </div>
 
             <div id="regionalPresenceControls" style="display: flex; flex-direction: column; gap: 12px;">
-                <div class="micro-card" style="font-size: 0.85em; line-height: 1.4;">
-                    Uses historical TLE revisions and operational visibility scoring to identify newly emerging regional access.
+                <div class="field" style="position: relative;">
+                    <label for="manoeuvreLocationSearchInput">Search Strategic Location (OSM Geocoder)</label>
+                    <div style="display: flex; gap: 4px; position: relative;">
+                        <input type="text" id="manoeuvreLocationSearchInput" placeholder="Search city, state or country..." autocomplete="off" style="width: 100%; background: rgba(14, 25, 41, 0.9); color: var(--text-main); border: 1px solid rgba(111, 226, 255, 0.35); border-radius: 10px; padding: 10px 12px; font-size: 14px;">
+                        <div id="manoeuvreSearchSpinner" class="is-hidden" style="position: absolute; right: 12px; top: 12px; border: 2px solid rgba(111, 226, 255, 0.1); border-left-color: var(--accent); border-radius: 50%; width: 16px; height: 16px; animation: spin 1s linear infinite;"></div>
+                    </div>
+                    <div id="manoeuvreSearchSuggestions" style="position: absolute; width: 100%; top: 100%; left: 0; background: rgba(6, 15, 28, 0.96); border: 1px solid var(--panel-border); border-radius: 8px; margin-top: 4px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); z-index: 100; max-height: 200px; overflow-y: auto; display: none;"></div>
                 </div>
 
-                <div style="display: flex; gap: 8px;">
-                    <select id="regionalPresenceRegionSelect" style="flex: 1;">
-                        <option value="current">Use Selected Region</option>
-                        <option value="delhi" selected>Delhi Preset</option>
-                        <option value="pokhran">Pokhran Preset</option>
-                        <option value="siachen">Siachen Preset</option>
-                    </select>
-                    <select id="regionalPresenceWindowSelect" style="width: 130px;">
+                <div class="field">
+                    <label for="regionalPresenceWindowSelect">Screening Timeframe</label>
+                    <select id="regionalPresenceWindowSelect" style="width: 100%;">
                         <option value="15">15 Days</option>
                         <option value="30" selected>30 Days</option>
                         <option value="60">60 Days</option>
@@ -216,13 +165,6 @@ function buildSidebar() {
 
                 <button id="regionalPresenceRunButton" class="primary" type="button" style="width: 100%;">Analyze Regional Access</button>
             </div>
-
-            <div id="regionalPresenceSummary" class="micro-card" style="display: none; margin-top: 12px; border-left: 2px solid var(--text-accent);">
-                <div style="font-size: 0.85em; font-weight: bold; margin-bottom: 6px;">Regional Presence Summary</div>
-                <div id="regionalPresenceSummaryContent" style="display: flex; flex-direction: column; gap: 6px; font-size: 0.85em;"></div>
-            </div>
-
-            <div id="regionalPresenceResults" class="list" style="margin-top: 12px;"></div>
         </div>
     `;
 }
@@ -302,147 +244,19 @@ export default {
         const driftNotice = document.getElementById("driftContextNotice");
         const driftTargetLabel = document.getElementById("driftTargetLabel");
         const driftExitBtn = document.getElementById("driftExitFocusButton");
-        const driftLegend = document.getElementById("driftLegend");
-        const driftLegendItems = document.getElementById("driftLegendItems");
-        const driftMetrics = document.getElementById("driftMetrics");
-        const driftMetricsContent = document.getElementById("driftMetricsContent");
-        const driftIntelligence = document.getElementById("driftIntelligence");
-        const driftIntelligenceContent = document.getElementById("driftIntelligenceContent");
         const driftMagToggle = document.getElementById("driftMagnificationToggle");
 
         const manoeuvreTargetNotice = document.getElementById("manoeuvreTargetNotice");
         const manoeuvreTargetControls = document.getElementById("manoeuvreTargetControls");
         const manoeuvreAnalyzeButton = document.getElementById("manoeuvreAnalyzeButton");
-        const manoeuvreEventLog = document.getElementById("manoeuvreEventLog");
-        const manoeuvreLogContent = document.getElementById("manoeuvreLogContent");
+
         const regionalPresenceNotice = document.getElementById("regionalPresenceNotice");
         const regionalPresenceRegionSelect = document.getElementById("regionalPresenceRegionSelect");
         const regionalPresenceWindowSelect = document.getElementById("regionalPresenceWindowSelect");
         const regionalPresenceRunButton = document.getElementById("regionalPresenceRunButton");
-        const regionalPresenceSummary = document.getElementById("regionalPresenceSummary");
-        const regionalPresenceSummaryContent = document.getElementById("regionalPresenceSummaryContent");
-        const regionalPresenceResults = document.getElementById("regionalPresenceResults");
         let regionalPresenceSelectionTouched = false;
 
         const scope = new ListenerScope();
-
-        const renderRegionalPresenceSummary = (result) => {
-            const summary = result?.summary || {};
-            const debugMetrics = result?.debugMetrics || {};
-            regionalPresenceSummaryContent.innerHTML = `
-                <div style="display: flex; justify-content: space-between; gap: 12px;">
-                    <span>Region</span>
-                    <span style="color: var(--text-bright);">${escapeHtml(result?.region?.name || "Unknown")}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; gap: 12px;">
-                    <span>Window</span>
-                    <span style="color: var(--text-bright);">${result?.windowDays ?? 0}d</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; gap: 12px;">
-                    <span>Finding Count</span>
-                    <span style="color: var(--text-bright);">${summary.findingCount ?? 0}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; gap: 12px;">
-                    <span>Unexpected Access</span>
-                    <span style="color: var(--text-bright);">${summary.unexpectedRegionalPresenceCount ?? 0}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; gap: 12px;">
-                    <span>Avg Confidence</span>
-                    <span style="color: var(--text-bright);">${Number.isFinite(summary.averageConfidenceScore) ? `${Math.round(summary.averageConfidenceScore * 100)}%` : "0%"}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; gap: 12px;">
-                    <span>Coverage Pass Rate</span>
-                    <span style="color: var(--text-bright);">${Number.isFinite(debugMetrics.coveragePassRate) ? `${Math.round(debugMetrics.coveragePassRate * 100)}%` : "0%"}</span>
-                </div>
-            `;
-            regionalPresenceSummary.style.display = "block";
-        };
-
-        const renderRegionalPresenceResults = (result) => {
-            if (!result || !Array.isArray(result.findings) || !result.findings.length) {
-                regionalPresenceSummary.style.display = "block";
-                regionalPresenceSummaryContent.innerHTML = `
-                    <div style="color: var(--text-dim);">No satellites showed a sustained new regional access pattern in this window.</div>
-                `;
-                regionalPresenceResults.innerHTML = "";
-                return;
-            }
-
-            regionalPresenceResults.innerHTML = result.findings.map(renderRegionalPresenceFinding).join("");
-            renderRegionalPresenceSummary(result);
-        };
-
-        const renderDriftMetrics = (drift) => {
-            if (!drift || !drift.analysis) return;
-            const a = drift.analysis;
-            
-            const tracks = drift.tracks || [];
-            let longDrift = 0;
-            let groundTrackDisp = 0;
-            
-            if (tracks.length >= 2) {
-                const oldestTrack = [...tracks].sort((a,b) => a.dayOffset - b.dayOffset)[0];
-                const latestTrack = [...tracks].sort((a,b) => b.dayOffset - a.dayOffset)[0];
-                
-                const oldest = oldestTrack.samples[0];
-                const latest = latestTrack.samples[0];
-                
-                if (oldest && latest) {
-                    longDrift = latest.lon - oldest.lon;
-                    const p1 = new Cesium.Cartesian3(oldest.x, oldest.y, oldest.z);
-                    const p2 = new Cesium.Cartesian3(latest.x, latest.y, latest.z);
-                    groundTrackDisp = Cesium.Cartesian3.distance(p1, p2) / 1000;
-                }
-            }
-
-            // Generate Intelligence Narrative
-            let narrative = "";
-            const lonAbs = Math.abs(longDrift);
-            const driftDir = longDrift > 0 ? "eastward" : "westward";
-            
-            if (lonAbs > 0.05) {
-                narrative += `Satellite is <strong>drifting ${driftDir}</strong> (${lonAbs.toFixed(2)}° over ${a.daysAnalyzed} days). `;
-            } else {
-                narrative += `Satellite maintaining <strong>stable longitudinal station</strong>. `;
-            }
-
-            if (Math.abs(a.smaShiftKm) > 1) {
-                narrative += `Orbital altitude has <strong>${a.smaShiftKm > 0 ? "increased" : "decreased"}</strong> by ${Math.abs(a.smaShiftKm).toFixed(1)} km, suggesting ${Math.abs(a.smaShiftKm) > 5 ? "a major manoeuvre" : "station-keeping activity"}. `;
-            }
-
-            const indiaLon = [68, 97];
-            const currentLon = tracks.find(t => t.dayOffset === 0)?.samples[0]?.lon;
-            if (currentLon >= indiaLon[0] && currentLon <= indiaLon[1]) {
-                narrative += `Object currently has <strong>active coverage over Indian airspace</strong>. `;
-            } else if (longDrift > 0 && currentLon < indiaLon[0]) {
-                narrative += `Object is <strong>approaching Indian regional coverage</strong> from the west. `;
-            } else if (longDrift < 0 && currentLon > indiaLon[1]) {
-                narrative += `Object is <strong>approaching Indian regional coverage</strong> from the east. `;
-            }
-
-            driftIntelligenceContent.innerHTML = narrative;
-            driftIntelligence.style.display = "block";
-
-            driftMetricsContent.innerHTML = `
-                <div style="display: flex; justify-content: space-between;">
-                    <span>Inc. Shift:</span>
-                    <span style="color: var(--text-bright);">${a.inclinationShiftDeg >= 0 ? "+" : ""}${a.inclinationShiftDeg.toFixed(4)}°</span>
-                </div>
-                <div style="display: flex; justify-content: space-between;">
-                    <span>Alt. Delta:</span>
-                    <span style="color: var(--text-bright);">${a.smaShiftKm >= 0 ? "+" : ""}${a.smaShiftKm.toFixed(2)} km</span>
-                </div>
-                <div style="display: flex; justify-content: space-between;">
-                    <span>Long. Drift:</span>
-                    <span style="color: var(--text-bright);">${longDrift >= 0 ? "+" : ""}${longDrift.toFixed(3)}°</span>
-                </div>
-                <div style="display: flex; justify-content: space-between;">
-                    <span>Ground Disp:</span>
-                    <span style="color: var(--text-bright);">${groundTrackDisp.toFixed(1)} km</span>
-                </div>
-            `;
-            driftMetrics.style.display = "block";
-        };
 
         const syncUI = () => {
             const satelliteId = appState.activeSatellitePathId;
@@ -457,15 +271,13 @@ export default {
                 if (appState.isFocusMode && appState.focusedSatelliteId === satelliteId) {
                     driftExitBtn.style.display = "block";
                     if (appState.driftHistory) {
-                        driftLegend.style.display = "block";
-                        driftLegendItems.innerHTML = renderLegend(appState.driftHistory.tracks);
-                        renderDriftMetrics(appState.driftHistory);
+                        ctx.shared.renderDriftAnalysis(appState.driftHistory);
                     }
                 } else {
                     driftExitBtn.style.display = "none";
-                    driftLegend.style.display = "none";
-                    driftMetrics.style.display = "none";
-                    driftIntelligence.style.display = "none";
+                    if (elements.analysisPanel && elements.analysisPanel.innerHTML.includes("Drift Evolution")) {
+                        elements.analysisPanel.innerHTML = "";
+                    }
                 }
             } else {
                 driftControls.style.display = "none";
@@ -473,19 +285,13 @@ export default {
                 
                 manoeuvreTargetControls.style.display = "none";
                 manoeuvreTargetNotice.style.display = "block";
-                manoeuvreEventLog.style.display = "none";
             }
 
-            if (regionalPresenceRegionSelect) {
-                if (!regionalPresenceSelectionTouched && appState.selectedArea) {
-                    regionalPresenceRegionSelect.value = "current";
-                }
-                if (appState.selectedArea && regionalPresenceRegionSelect.value === "current") {
-                    regionalPresenceNotice.textContent = `Using the traced region "${appState.selectedArea.name || "Selected Region"}" for regional presence analysis.`;
-                } else if (regionalPresenceRegionSelect.value === "current" && !appState.selectedArea) {
-                    regionalPresenceNotice.textContent = "No traced region is currently selected. Choose a preset region or trace a polygon first.";
+            if (regionalPresenceNotice) {
+                if (appState.selectedArea) {
+                    regionalPresenceNotice.textContent = `Using the strategic location "${appState.selectedArea.name || "Selected Region"}" for emerging access analysis.`;
                 } else {
-                    regionalPresenceNotice.textContent = "Compare an earlier and recent visibility window to spot satellites that newly enter a strategic region.";
+                    regionalPresenceNotice.textContent = "Search a strategic region and select a window to scan for emerging accesses.";
                 }
             }
             
@@ -504,24 +310,17 @@ export default {
             }
         });
 
-        scope.add(regionalPresenceRegionSelect, "change", () => {
-            regionalPresenceSelectionTouched = true;
-            syncUI();
-        });
-
         scope.add(regionalPresenceRunButton, "click", async () => {
-            const regionKey = regionalPresenceRegionSelect?.value || "delhi";
-            const selectedArea = resolveRegionalPresenceArea(regionKey);
+            const selectedArea = appState.selectedArea;
             const timeframeDays = Number.parseInt(regionalPresenceWindowSelect?.value || "30", 10) || 30;
 
             if (!selectedArea) {
-                setStatus("Select a traced region or preset before running regional presence analysis.");
+                setStatus("Search and select a strategic location before running regional presence analysis.");
                 return;
             }
 
             setStatus(`Analyzing emerging regional access for ${selectedArea.name || "selected region"} over ${timeframeDays} days...`);
-            regionalPresenceResults.innerHTML = "";
-            regionalPresenceSummary.style.display = "none";
+            renderAnalysisLoader("Emerging Regional Access", "Screening historical pass windows and visibility scores...");
 
             try {
                 const currentTime = appState.simulationMode && appState.simulationClock
@@ -537,15 +336,14 @@ export default {
                     time: currentTime.toISOString()
                 }, appState.catalogApiBaseUrl);
 
-                renderRegionalPresenceResults(result);
+                ctx.shared.renderRegionalAccessAnalysis(result);
                 setStatus(`Regional presence analysis complete for ${selectedArea.name || "selected region"}.`);
             } catch (error) {
                 console.error("Regional presence analysis failed:", error);
-                regionalPresenceSummary.style.display = "block";
-                regionalPresenceSummaryContent.innerHTML = `
-                    <div style="color: var(--text-danger);">Unable to complete regional presence analysis.</div>
-                `;
                 setStatus(`Regional presence analysis failed for ${selectedArea.name || "selected region"}.`);
+                if (elements.analysisPanel) {
+                    elements.analysisPanel.innerHTML = `<div class="list-item danger"><strong>Error:</strong> Regional presence analysis failed for ${escapeHtml(selectedArea.name || "selected region")}.</div>`;
+                }
             }
         });
 
@@ -572,6 +370,7 @@ export default {
 
             const days = document.getElementById("driftDurationSelect").value;
             setStatus(`Computing ${days}-day orbital drift evolution for ${satelliteId}...`);
+            renderAnalysisLoader("Orbital Drift Analysis", "Simulating historical trajectories and overlaying drift rings...");
             
             try {
                 const currentTime = appState.simulationMode && appState.simulationClock 
@@ -587,7 +386,6 @@ export default {
 
                 previousInertialViewEnabled = appState.isInertialViewEnabled;
                 if (typeof ctx.shared.setInertialView === "function") {
-                    // Why: historical drift rings are easier to compare when the orbit stays circular in inertial view.
                     ctx.shared.setInertialView(true);
                 }
                 
@@ -595,11 +393,15 @@ export default {
                 ctx.shared.clearPathEntities();
 
                 ctx.shared.drawDriftTracks(drift);
+                ctx.shared.renderDriftAnalysis(drift);
                 syncUI();
                 setStatus(`Orbital drift evolution rendered for ${satelliteId}.`);
             } catch (error) {
                 console.error("Drift analysis failed:", error);
                 setStatus(`Drift analysis failed for ${satelliteId}.`);
+                if (elements.analysisPanel) {
+                    elements.analysisPanel.innerHTML = `<div class="list-item danger"><strong>Error:</strong> Drift analysis failed for ${escapeHtml(satelliteId)}.</div>`;
+                }
             }
         });
 
@@ -616,7 +418,7 @@ export default {
             if (!satelliteId) return;
 
             setStatus(`Analyzing manoeuvre signature for ${satelliteId}...`);
-            manoeuvreEventLog.style.display = "none";
+            renderAnalysisLoader("Manoeuvre Signature Analysis", "Comparing predicted trajectory with telemetry revisions...");
 
             try {
                 const { payload } = await ctx.shared.postJsonWithFallback("/api/analysis/target-manoeuvre-detection", {
@@ -625,12 +427,10 @@ export default {
                 const result = payload.result;
 
                 if (result && result.status === "success") {
-                    manoeuvreLogContent.innerHTML = renderManoeuvreEvent(result);
-                    manoeuvreEventLog.style.display = "block";
+                    ctx.shared.renderManoeuvreAnalysis(result);
 
                     previousInertialViewEnabled = appState.isInertialViewEnabled;
                     if (typeof ctx.shared.setInertialView === "function") {
-                        // Why: old-vs-new manoeuvre orbit comparisons are easier to read as circular inertial rings.
                         ctx.shared.setInertialView(true);
                     }
 
@@ -643,10 +443,124 @@ export default {
                     setStatus(`Manoeuvre detection complete for ${satelliteId}.`);
                 } else {
                     setStatus(result.message || "Analysis inconclusive.");
+                    if (elements.analysisPanel) {
+                        elements.analysisPanel.innerHTML = `<div class="list-item warning"><strong>Inconclusive:</strong> ${escapeHtml(result.message || "Analysis inconclusive.")}</div>`;
+                    }
                 }
             } catch (error) {
                 console.error("Manoeuvre analysis failed:", error);
                 setStatus(`Manoeuvre analysis failed for ${satelliteId}.`);
+                if (elements.analysisPanel) {
+                    elements.analysisPanel.innerHTML = `<div class="list-item danger"><strong>Error:</strong> Manoeuvre analysis failed for ${escapeHtml(satelliteId)}.</div>`;
+                }
+            }
+        });
+
+        const searchInput = document.getElementById("manoeuvreLocationSearchInput");
+        const suggestionsBox = document.getElementById("manoeuvreSearchSuggestions");
+        const spinner = document.getElementById("manoeuvreSearchSpinner");
+
+        let searchTimeout = null;
+
+        const selectPlace = (item) => {
+            suggestionsBox.style.display = "none";
+            searchInput.value = item.display_name;
+
+            const bbox = item.boundingbox;
+            if (!bbox || bbox.length < 4) {
+                setStatus("Selected place does not contain boundary values.");
+                return;
+            }
+
+            const minLat = parseFloat(bbox[0]);
+            const maxLat = parseFloat(bbox[1]);
+            const minLon = parseFloat(bbox[2]);
+            const maxLon = parseFloat(bbox[3]);
+
+            const centroid = { lat: parseFloat(item.lat), lon: parseFloat(item.lon) };
+            const points = [
+                { lat: maxLat, lon: minLon },
+                { lat: maxLat, lon: maxLon },
+                { lat: minLat, lon: maxLon },
+                { lat: minLat, lon: minLon }
+            ];
+
+            appState.selectedArea = {
+                name: item.display_name,
+                centroid,
+                points
+            };
+
+            // Draw boundary outline on Cesium map
+            updateSelectedAreaVisual(appState.selectedArea);
+
+            // Camera flyTo bounding box
+            ctx.shared.viewer.camera.flyTo({
+                destination: Cesium.Rectangle.fromDegrees(minLon, minLat, maxLon, maxLat),
+                duration: 1.5
+            });
+
+            setStatus(`Scoped emerging access scan on: ${item.display_name}.`);
+            syncUI();
+        };
+
+        scope.add(searchInput, "input", (e) => {
+            const query = e.target.value.trim();
+            clearTimeout(searchTimeout);
+            if (query.length < 3) {
+                suggestionsBox.innerHTML = "";
+                suggestionsBox.style.display = "none";
+                return;
+            }
+
+            spinner.classList.remove("is-hidden");
+
+            searchTimeout = setTimeout(async () => {
+                try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`, {
+                        headers: {
+                            "User-Agent": "SDA-Console-Agent (acer.gemini.antigravity@example.com)"
+                        }
+                    });
+                    const data = await res.json();
+                    spinner.classList.add("is-hidden");
+
+                    if (!Array.isArray(data) || data.length === 0) {
+                        suggestionsBox.innerHTML = `<div style="padding: 10px; color: var(--text-dim); font-size: 13px;">No results found.</div>`;
+                        suggestionsBox.style.display = "block";
+                        return;
+                    }
+
+                    suggestionsBox.innerHTML = data.map((item, i) => `
+                        <div class="suggestion-item" data-index="${i}" style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 13px; color: var(--text-main); line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            ${escapeHtml(item.display_name)}
+                        </div>
+                    `).join("");
+
+                    const items = suggestionsBox.querySelectorAll(".suggestion-item");
+                    items.forEach(el => {
+                        el.addEventListener("mouseenter", () => el.style.background = "rgba(111, 226, 255, 0.15)");
+                        el.addEventListener("mouseleave", () => el.style.background = "none");
+                        el.addEventListener("click", () => {
+                            const idx = parseInt(el.dataset.index);
+                            selectPlace(data[idx]);
+                        });
+                    });
+
+                    suggestionsBox.style.display = "block";
+                } catch (err) {
+                    console.error(err);
+                    spinner.classList.add("is-hidden");
+                    suggestionsBox.innerHTML = `<div style="padding: 10px; color: var(--danger); font-size: 13px;">Error fetching locations.</div>`;
+                    suggestionsBox.style.display = "block";
+                }
+            }, 400);
+        });
+
+        // Hide suggestions when clicking outside
+        scope.add(document, "click", (e) => {
+            if (e.target !== searchInput && e.target !== suggestionsBox) {
+                suggestionsBox.style.display = "none";
             }
         });
 
@@ -654,9 +568,7 @@ export default {
 
         return {
             unmount() {
-                if (isReplaying) toggleReplay();
-                appState.simulationMode = false;
-                appState.simulationClock = null;
+                updateSelectedAreaVisual(null);
                 scope.dispose();
             }
         };

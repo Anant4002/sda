@@ -246,7 +246,7 @@ async function recordRegionScanAnalysis(result, context = {}) {
     }
 
     const thresholdKm = Number.isFinite(result.proximityThresholdKm) ? result.proximityThresholdKm : context.thresholdKm;
-    const horizonMinutes = Number.isFinite(result.forecastWindowMinutes) ? result.horizonMinutes : context.horizonMinutes;
+    const horizonMinutes = Number.isFinite(result.forecastWindowMinutes) ? result.forecastWindowMinutes : context.horizonMinutes;
 
     return persistAlertBatch("volumetric_scan", result.alerts, {
         ...context,

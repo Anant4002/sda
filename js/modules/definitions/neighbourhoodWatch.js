@@ -5,7 +5,7 @@ import {
     NEIGHBOURHOOD_WATCH_CRITICAL_KM
 } from "../../config.js";
 import { appState } from "../../state.js";
-import { setStatus } from "../../ui.js";
+import { setStatus, renderAnalysisLoader } from "../../ui.js";
 import { escapeHtml, formatDateTime, formatNumber } from "../../utils.js";
 import { field, selectControl, ListenerScope } from "../../ui/panelSystem.js";
 import { eventBus, events } from "../eventBus.js";
@@ -19,6 +19,8 @@ const THRESHOLD_OPTIONS = [
     { value: "2000", label: "2000 km" }
 ];
 
+let currentResult = null; // Store full results for client-side advanced filtering
+
 function buildSidebar() {
     return `
         <div class="section">
@@ -28,13 +30,19 @@ function buildSidebar() {
                 <select id="neighbourhoodWatchSelect">
                     <option value="">Global (All Indian Assets)</option>
                 </select>
-                <div class="readout" style="margin-top: 5px; font-size: 0.85em;">
+                <div class="readout" style="margin-top: 5px; font-size: 0.85em; line-height: 1.4;">
                     Selecting 'Global' will screen every Indian satellite against the full catalog.
                 </div>
             </div>
             ${field("Proximity Threshold", selectControl("neighbourhoodThresholdSelect", THRESHOLD_OPTIONS), { id: "neighbourhoodThresholdSelect" })}
-            <div class="micro-card" style="margin-top: 8px; font-size: 11px; line-height: 1.4;">
-                <div style="margin-bottom: 4px;"><strong>Severity Criteria:</strong></div>
+            
+            <button id="neighbourhoodWatchRunButton" class="primary" style="margin-top: 12px; width: 100%;">Execute Neighbourhood Watch</button>
+        </div>
+
+
+        <div class="section">
+            <div class="section-title">Proximity Severity Reference</div>
+            <div class="micro-card" style="font-size: 11px; line-height: 1.4;">
                 <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 2px;">
                     <span class="badge badge-danger" style="min-width: 60px;">Critical</span> <span>&lt; ${NEIGHBOURHOOD_WATCH_CRITICAL_KM} km</span>
                 </div>
@@ -45,12 +53,6 @@ function buildSidebar() {
                     <span class="badge badge-info" style="min-width: 60px;">Routine</span> <span>&lt; ${NEIGHBOURHOOD_WATCH_THRESHOLD_KM} km</span>
                 </div>
             </div>
-            <button id="neighbourhoodWatchRunButton" type="button" style="margin-top: 12px;">Execute Neighbourhood Watch</button>
-        </div>
-        <div class="section">
-            <div class="section-title">Proximity Event Log</div>
-            <div id="neighbourhoodWatchSummary" class="micro-card">Configure screening scope and threshold to begin.</div>
-            <div id="neighbourhoodWatchList" class="list"></div>
         </div>
     `;
 }
@@ -70,56 +72,6 @@ function populateSatelliteOptions() {
     select.innerHTML = html;
 }
 
-function renderResult(result) {
-    const summary = document.getElementById("neighbourhoodWatchSummary");
-    const list = document.getElementById("neighbourhoodWatchList");
-    if (!summary || !list) return;
-
-    if (!result || !Array.isArray(result.alerts) || !result.alerts.length) {
-        summary.textContent = "No proximity events detected within the selected threshold.";
-        list.innerHTML = "";
-        clearProximityAlerts();
-        return;
-    }
-
-    const scopeText = result.isGlobal ? "All Indian Assets" : result.primaryId;
-    summary.textContent = `${result.alerts.length} events detected within ${formatNumber(result.thresholdKm, 0)} km of ${scopeText}.`;
-
-    // Render Globe Markers
-    drawProximityAlerts(result.alerts);
-
-    // Sortable-like list (already sorted by distance from backend)
-    list.innerHTML = result.alerts.map((alert) => {
-        let severityClass = "info";
-        let badgeClass = "badge-info";
-        let label = "ROUTINE";
-
-        if (alert.severity === "critical") {
-            severityClass = "danger";
-            badgeClass = "badge-danger";
-            label = "CRITICAL";
-        } else if (alert.severity === "warning") {
-            severityClass = "warning";
-            badgeClass = "badge-warning";
-            label = "WARNING";
-        }
-
-        return `
-            <div class="list-item ${severityClass}">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                    <strong>${escapeHtml(alert.primaryId)} ↔ ${escapeHtml(alert.secondaryId)}</strong>
-                    <span class="badge ${badgeClass}">${label}</span>
-                </div>
-                <div style="font-size: 0.9em; margin-top: 5px; color: var(--text-dim);">
-                    Distance: <strong>${formatNumber(alert.closestDistanceKm, 2)} km</strong><br>
-                    Relative Velocity: ${Number.isFinite(alert.relativeVelocityKmS) ? `${formatNumber(alert.relativeVelocityKmS, 3)} km/s` : "N/A"}<br>
-                    Time (UTC): ${formatDateTime(alert.time)}
-                </div>
-            </div>
-        `;
-    }).join("");
-}
-
 function runWatch(ctx) {
     const select = document.getElementById("neighbourhoodWatchSelect");
     const thresholdSelect = document.getElementById("neighbourhoodThresholdSelect");
@@ -127,14 +79,24 @@ function runWatch(ctx) {
     const satelliteId = select ? select.value : ""; // Empty string means ALL
     const thresholdKm = Number(thresholdSelect?.value || 500);
 
-    setStatus(`Initializing Neighbourhood Watch for ${satelliteId || "All Indian Assets"}...`);
+    // Display a professional orbital calculation loader spinner
+    renderAnalysisLoader("Neighbourhood Watch", "Screening Indian assets against catalog items for close-approaches...");
     
     fetchBackendNeighbourhoodWatch({
-        satelliteId, // Backend now handles empty/null as "All Indian"
+        satelliteId,
         thresholdKm,
         time: Cesium.JulianDate.toDate(ctx.shared.viewer.clock.currentTime).toISOString()
     }, appState.catalogApiBaseUrl).then(async (response) => {
-        renderResult(response.result);
+        currentResult = response.result;
+        
+        // Draw Globe markers matching initial set
+        drawProximityAlerts(currentResult.alerts || []);
+
+        // Call right-hand panel renderer
+        if (typeof ctx.shared.renderNeighbourhoodWatchAnalysis === "function") {
+            ctx.shared.renderNeighbourhoodWatchAnalysis(currentResult);
+        }
+
         await ctx.shared.refreshOperationalAlerts(response.apiBaseUrl);
         setStatus(`Screening complete. ${response.result.alerts?.length || 0} events identified.`);
     }).catch((error) => {
@@ -155,14 +117,18 @@ export default {
         root.innerHTML = buildSidebar();
         populateSatelliteOptions();
 
+        currentResult = null; // Clear old sessions
+
         const scope = new ListenerScope();
         scope.add(document.getElementById("neighbourhoodWatchRunButton"), "click", () => runWatch(ctx));
         scope.addCleanup(eventBus.on(events.catalogReady, () => populateSatelliteOptions()));
+
 
         setStatus("Neighbourhood Watch module active. Configure scope and threshold.");
         return {
             unmount() {
                 clearProximityAlerts();
+                currentResult = null;
                 scope.dispose();
             }
         };

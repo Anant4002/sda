@@ -24,15 +24,19 @@ export function readCachedCatalog() {
 
 export function writeCachedCatalog(satellites, apiBaseUrl) {
     try {
-        // Optimization: Stripping 'characterisation' for the persistent cache.
-        // It's still available in memory for the current session, but stripping it
-        // helps fit the 15k records into the ~5MB browser localStorage limit.
         const compressed = satellites.map(s => ({
             name: s.name,
             line1: s.line1,
             line2: s.line2,
             noradId: s.noradId,
-            isIndian: s.isIndian
+            isIndian: s.isIndian,
+            firstAddedAt: s.firstAddedAt,
+            characterisation: s.characterisation ? {
+                orbitClass: s.characterisation.orbitClass,
+                objectType: s.characterisation.objectType,
+                operationalStatus: s.characterisation.operationalStatus,
+                ownership: s.characterisation.ownership
+            } : undefined
         }));
 
         window.localStorage.setItem(SATELLITE_CACHE_KEY, JSON.stringify({

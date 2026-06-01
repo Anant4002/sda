@@ -41,6 +41,12 @@ const Satellite = sequelize.define("Satellite", {
         type: DataTypes.DATE,
         allowNull: true,
         field: "last_observed_at"
+    },
+    firstAddedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        defaultValue: DataTypes.NOW,
+        field: "first_added_at"
     }
 }, {
     tableName: "satellites",

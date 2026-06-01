@@ -51,20 +51,20 @@ async function runSyncCycle(reason = "scheduled") {
     try {
         console.log(`[Scheduler] Executing sync cycle. Reason: ${reason}`);
         const count = await syncSatellites();
-        
+
         state.lastSuccessAt = new Date();
         state.lastSyncDurationMs = Date.now() - startTime;
         state.consecutiveFailures = 0;
         state.status = "HEALTHY";
         state.lastFailureReason = null;
-        
+
         console.log(`[Scheduler] Sync success. Count: ${count}. Duration: ${state.lastSyncDurationMs}ms.`);
     } catch (error) {
         state.lastFailureAt = new Date();
         state.lastFailureReason = error.message;
         state.consecutiveFailures++;
         state.lastSyncDurationMs = Date.now() - startTime;
-        
+
         // Determine health state based on failure depth
         if (state.consecutiveFailures === 1) {
             state.status = "DEGRADED";
@@ -114,7 +114,7 @@ async function startCatalogSyncScheduler(isDatabaseEmpty) {
 
     if (isDatabaseEmpty) {
         console.log("[Scheduler] DB Empty. Triggering initial async sync.");
-        runSyncCycle("initial_bootstrap"); 
+        runSyncCycle("initial_bootstrap");
     } else {
         const catalogStatus = await getCatalogStatus();
         state.lastSuccessAt = catalogStatus.latestVersion ? new Date(catalogStatus.latestVersion.syncedAt) : null;
@@ -173,8 +173,21 @@ async function forceSync() {
     return runSyncCycle("manual_force_trigger");
 }
 
+/**
+ * Stop the scheduler cleanly and clear active timeouts.
+ */
+function stopCatalogSyncScheduler() {
+    if (schedulerTimeout) {
+        clearTimeout(schedulerTimeout);
+        schedulerTimeout = null;
+    }
+    state.isInitialized = false;
+    console.log("[Scheduler] Stopped.");
+}
+
 module.exports = {
     startCatalogSyncScheduler,
+    stopCatalogSyncScheduler,
     getSchedulerStatus,
     forceSync
 };

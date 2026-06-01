@@ -144,26 +144,25 @@ async function syncSatellites() {
                 sequelizeOptions: { transaction }
             });
 
-            console.log("Updating Satellite table...");
-            // Preserve Indigenous and Uncorrelated data
-            // Only remove correlated CelesTrak data
-            await Satellite.destroy({ 
-                where: { 
-                    dataSource: "CELESTRAK",
-                    catalogStatus: "CORRELATED"
-                }, 
-                transaction 
-            });
+            const existingNames = new Set(existingRows.map(row => row.name));
+            const newSatellites = satelliteBatch.filter(s => !existingNames.has(s.name));
+            
+            console.log(`Found ${newSatellites.length} new satellites to insert out of ${satelliteBatch.length} fetched TLEs.`);
 
             // Prepare batch for insertion
-            const toInsert = satelliteBatch.map(s => ({
-                ...s,
-                dataSource: "CELESTRAK",
-                catalogStatus: "CORRELATED",
-                isIndigenous: false
-            }));
+            const toInsert = newSatellites.map(s => {
+                return {
+                    ...s,
+                    dataSource: "CELESTRAK",
+                    catalogStatus: "CORRELATED",
+                    isIndigenous: false,
+                    firstAddedAt: syncedAt
+                };
+            });
 
-            await Satellite.bulkCreate(toInsert, { transaction });
+            if (toInsert.length > 0) {
+                await Satellite.bulkCreate(toInsert, { transaction });
+            }
             console.log("Satellite records updated. Recording version...");
             const version = await recordCatalogVersion(satelliteBatch, transaction, { syncedAt });
             versionId = version.id;

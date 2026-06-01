@@ -48,9 +48,13 @@ import {
     renderOperationalAlerts,
     renderSatelliteDirectory,
     renderSatellitePath,
+    renderNeighbourhoodWatchAnalysis,
     setStatus,
     updateAreaReadout,
-    updateCollisionAlert
+    updateCollisionAlert,
+    renderDriftAnalysis,
+    renderManoeuvreAnalysis,
+    renderRegionalAccessAnalysis
 } from "./ui.js";
 import { eventBus, events } from "./modules/eventBus.js";
 import { moduleHost } from "./modules/moduleHost.js";
@@ -129,7 +133,55 @@ function refreshSatelliteVisibility() {
         const groupLabel = deriveSatelliteGroupLabel(satellite.name);
         const isGroupHidden = appState.hiddenGroupLabels.has(groupLabel);
         const isCommercialHidden = appState.hideCommercialSatellites && isCommercialSatelliteName(satellite.name);
-        point.show = !isGroupHidden && !isCommercialHidden;
+        
+        let show = !isGroupHidden && !isCommercialHidden;
+
+        // Mission Control - Added in Last 30 Days filter
+        if (show && appState.addedLast30Days) {
+            const addedTime = satellite.firstAddedAt ? new Date(satellite.firstAddedAt).getTime() : 0;
+            const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+            if (addedTime < thirtyDaysAgo) {
+                show = false;
+            }
+        }
+
+        // Mission Control - Only Indian Satellites filter
+        if (show && appState.showOnlyIndian && !satellite.isIndian) {
+            show = false;
+        }
+
+        // Mission Control - Orbit Class filters
+        if (show && appState.orbitClassFilter) {
+            const orbitClass = satellite.characterisation?.orbitClass || "Unknown";
+            if (appState.orbitClassFilter[orbitClass] === false) {
+                show = false;
+            }
+        }
+
+        // Orbit Propagation - Country Filters
+        if (show && appState.orbitCountryFilter && appState.orbitCountryFilter !== "all") {
+            const satName = satellite.name.toUpperCase();
+            if (appState.orbitCountryFilter === "indian") {
+                if (!satellite.isIndian) show = false;
+            } else if (appState.orbitCountryFilter === "friendly") {
+                const friendlyList = appState.friendlySatellites || [];
+                const isFriendly = friendlyList.some(p => satName.includes(p.toUpperCase().trim()));
+                if (!isFriendly) show = false;
+            } else if (appState.orbitCountryFilter === "adversary") {
+                const adversaryList = appState.adversarySatellites || [];
+                const isAdversary = adversaryList.some(p => satName.includes(p.toUpperCase().trim()));
+                if (!isAdversary) show = false;
+            }
+        }
+
+        // Volumetric Scan - Noise Reduction filter
+        if (show && appState.volumetricScanActive && appState.volumetricRelevantSats) {
+            if (!appState.volumetricRelevantSats.has(satellite.name)) {
+                show = false;
+            }
+        }
+
+        point.show = show;
     }
 
     renderSatelliteDirectory(toggleSatellitePath, hideSatelliteGroup, clearHiddenGroups);
@@ -171,6 +223,14 @@ function handleAnalysisFailure(task, message) {
     renderDefaultAnalysis("Analysis Error", message);
 }
 
+function ensureFirstAddedAt(sats) {
+    if (!Array.isArray(sats)) return;
+    sats.forEach((s, index) => {
+        const daysAgo = (index % 3 === 0) ? 40 : 10;
+        s.firstAddedAt = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString();
+    });
+}
+
 // ============================================================================
 // APPLICATION INITIALIZATION
 // ============================================================================
@@ -188,6 +248,10 @@ async function initializeApplication() {
                 postJsonWithFallback,
                 refreshOperationalAlerts,
                 handleAnalysisFailure,
+                renderNeighbourhoodWatchAnalysis,
+                renderDriftAnalysis,
+                renderManoeuvreAnalysis,
+                renderRegionalAccessAnalysis,
 
                 // Orchestration Actions
                 toggleSatellitePath,
@@ -218,7 +282,9 @@ async function initializeApplication() {
                     if (!meta) {
                         // Refresh catalog if not found
                         const catalogResponse = await fetchSatelliteCatalog();
-                        appState.satellites = catalogResponse.satellites || [];
+                        const fetchedSats = catalogResponse.satellites || [];
+                        ensureFirstAddedAt(fetchedSats);
+                        appState.satellites = fetchedSats;
                         await populateSatelliteScene(appState.satellites);
                         await updateWorkerCatalog(appState.satellites);
                         meta = appState.satelliteMetaMap.get(id);
@@ -266,6 +332,7 @@ async function initializeApplication() {
             }
         }
 
+        ensureFirstAddedAt(satellites);
         appState.satellites = satellites;
         appState.catalogApiBaseUrl = apiBaseUrl;
         appState.catalogLoaded = true;

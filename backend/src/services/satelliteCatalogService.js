@@ -25,7 +25,8 @@ const LEGACY_SAFE_SATELLITE_ATTRIBUTES = [
     "dataSource",
     "intData",
     "isIndigenous",
-    "lastObservedAt"
+    "lastObservedAt",
+    "firstAddedAt"
 ];
 
 function buildCacheKey(options) {

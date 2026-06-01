@@ -1,4 +1,4 @@
-import { renderOperationalAlerts, setStatus } from "../../ui.js";
+import { renderOperationalAlerts, setStatus, renderAnalysisLoader } from "../../ui.js";
 import { ListenerScope } from "../../ui/panelSystem.js";
 import { eventBus, events } from "../eventBus.js";
 
@@ -7,7 +7,6 @@ function buildSidebar() {
         <div class="section">
             <div class="section-title">Operational Alerts</div>
             <div id="operationalAlertSummary" class="micro-card">Loading backend alert feed...</div>
-            <div id="operationalAlertList" class="list"></div>
         </div>
         <div class="section">
             <div class="section-title">Refresh</div>
@@ -39,6 +38,7 @@ export default {
                 btn.disabled = true;
                 btn.textContent = "Refreshing...";
                 setStatus("Refreshing operational alert feed...");
+                renderAnalysisLoader("Operational Alert Feed", "Querying persisted analytical observations and conjunction alerts from the backend feed...");
                 await ctx.shared.refreshOperationalAlerts();
                 setStatus("Operational alert feed refreshed.");
             } catch (err) {
@@ -67,6 +67,7 @@ export default {
         if (ctx.shared.alertsSnapshot) {
             renderOperationalAlerts(ctx.shared.alertsSnapshot);
         } else {
+            renderAnalysisLoader("Operational Alert Feed", "Querying persisted analytical observations and conjunction alerts from the backend feed...");
             ctx.shared.refreshOperationalAlerts();
         }
 

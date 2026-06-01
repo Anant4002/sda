@@ -15,7 +15,8 @@ function serializeSatellite(satellite) {
         dataSource: data.dataSource || "CELESTRAK",
         intData: data.intData || null,
         isIndigenous: data.isIndigenous || false,
-        lastObservedAt: data.lastObservedAt || null
+        lastObservedAt: data.lastObservedAt || null,
+        firstAddedAt: data.firstAddedAt || null
     };
 
     if (serialized.catalogStatus === "UNCORRELATED") {

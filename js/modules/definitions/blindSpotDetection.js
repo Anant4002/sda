@@ -1,5 +1,5 @@
 import { appState } from "../../state.js";
-import { setStatus } from "../../ui.js";
+import { setStatus, renderAreaAnalysis, renderAnalysisLoader } from "../../ui.js";
 import { ListenerScope } from "../../ui/panelSystem.js";
 import { escapeHtml } from "../../utils.js";
 import { hasSelectedArea } from "../regionTrace.js";
@@ -9,6 +9,7 @@ import {
 } from "./regionPanelTemplate.js";
 import { eventBus, events } from "../eventBus.js";
 import "../../../shared/blindSpotCoverageUtils.js";
+import { updateSelectedAreaVisual } from "../../viewer.js";
 
 const {
     classifyCoverageLevel,
@@ -47,8 +48,6 @@ const STRATEGIC_SITES = [
     { name: "Sri Lanka", lat: 7.873, lon: 80.771 }
 ];
 
-const WORLD_BOUNDARIES_URL = "https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_0_countries.geojson";
-let worldData = null;
 let currentBaseDate = new Date(); // Controls the date we are analyzing
 
 const SATELLITE_GROUPS = [
@@ -96,16 +95,7 @@ function buildSidebar() {
                 ${groupsHtml}
             </div>
             <button id="bsRecalculateBtn" class="primary" style="width:100%">Update Analysis</button>
-        </div>
-
-        <div class="section">
-            <div class="section-title">Blind Spot Schedule (IST)</div>
-            <div id="bsScheduleContainer" class="list" style="max-height: 250px; overflow-y: auto;">
-                <div class="empty-state">Select a region to compute schedule.</div>
-            </div>
-            <div style="margin-top:8px;">
-                <button id="bsExportCsvBtn" class="secondary" style="width:100%; font-size:11px;">Export CSV</button>
-            </div>
+            <button id="bsExportCsvBtn" class="secondary" style="width:100%; font-size:11px; margin-top:8px;">Export CSV Schedule</button>
         </div>
     `;
 }
@@ -1350,48 +1340,7 @@ function generateSchedule(site, satrecs, timeframeHours = 24, elevationThreshold
     return schedule;
 }
 
-function renderSchedule(scheduleContainer, schedule) {
-    if (!scheduleContainer) return;
 
-    if (schedule.length === 0) {
-        scheduleContainer.innerHTML = `<div class="empty-state">No blind windows detected. The computed assessment remains stable until the next recalculation.</div>`;
-        return;
-    }
-
-    const coverageGroups = SATELLITE_GROUPS.filter(g => g.selected).map(g => g.label).join(", ");
-    const istOffset = 5.5 * 60 * 60 * 1000;
-    const debugMetrics = schedule.debugMetrics;
-    const debugBlock = debugMetrics ? `
-        <div class="micro-card" style="margin-bottom: 10px; padding: 10px;">
-            <div style="font-weight: 700; margin-bottom: 6px;">Debug Metrics</div>
-            <div style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; font-size: 11px; color: var(--text-dim);">
-                <div>Avg Strength: <strong style="color: white;">${debugMetrics.averageCoverageStrength.toFixed(3)}</strong></div>
-                <div>Pass Rate: <strong style="color: white;">${debugMetrics.persistentCoveragePercent.toFixed(1)}%</strong></div>
-                <div>Max Dark: <strong style="color: white;">${debugMetrics.maxDarkDurationMinutes.toFixed(0)}m</strong></div>
-                <div>Avg Dark: <strong style="color: white;">${debugMetrics.averageDarkDurationMinutes.toFixed(0)}m</strong></div>
-                <div>ISR Contrib.: <strong style="color: #4fc3f7;">${debugMetrics.isrContributionCount || 0}</strong></div>
-            </div>
-        </div>
-    ` : "";
-
-    scheduleContainer.innerHTML = schedule.map(bs => {
-        const istStart = new Date(bs.start.getTime() + istOffset);
-        const istEnd = new Date(bs.end.getTime() + istOffset);
-        return `
-            <div class="list-item danger" style="padding: 10px; margin-bottom: 8px;">
-                <div style="font-weight:bold; margin-bottom: 4px; color: var(--severity-danger);">Computed Blind Window</div>
-                <div style="display:flex; justify-content:space-between; font-size: 0.85em; color: var(--text-dim); margin-bottom: 4px;">
-                    <span>Start: ${istStart.toISOString().substr(11,5)}</span>
-                    <span>End: ${istEnd.toISOString().substr(11,5)}</span>
-                </div>
-                <div style="font-size: 0.85em; margin-bottom: 4px;">Duration: <strong style="color:white;">${bs.duration} mins</strong></div>
-                <div style="font-size: 0.75em; color: var(--text-dim); font-style: italic;">Coverage set: ${coverageGroups || "None"}</div>
-            </div>
-        `;
-    }).join("");
-
-    scheduleContainer.innerHTML = `${debugBlock}${scheduleContainer.innerHTML}`;
-}
 
 function generateGrid(bounds, count = 15) {
     const grid = [];
@@ -1449,14 +1398,7 @@ export default {
             tlContainer.innerHTML = buildTimeline();
         }
 
-        if (!worldData) {
-            try {
-                const resp = await fetch(WORLD_BOUNDARIES_URL);
-                worldData = await resp.json();
-            } catch (e) {
-                console.error("Failed to load world boundaries:", e);
-            }
-        }
+
 
         const scope = new ListenerScope();
         let focusedSite = null;
@@ -1474,7 +1416,6 @@ export default {
         const timeDisplay = document.getElementById("bsTimeDisplay");
         const scrubber = document.getElementById("bsTimeScrubber");
         const statusBadge = document.getElementById("bsCoverageStatus");
-        const scheduleContainer = document.getElementById("bsScheduleContainer");
         const searchInput = document.getElementById("bsSearchInput");
         const searchBtn = document.getElementById("bsSearchBtn");
         const dateDisplay = document.getElementById("bsCurrentDateDisplay");
@@ -1485,41 +1426,61 @@ export default {
         const cbGroup = document.querySelectorAll(".sat-group-cb");
 
         const triggerRecalculate = () => {
-            currentSatrecs = getFilteredSatrecs();
-            let target = focusedSite;
-            if (!target && hasSelectedArea()) {
-                target = {
-                    name: appState.selectedArea.name || "Traced Region",
-                    lat: appState.selectedArea.centroid.lat,
-                    lon: appState.selectedArea.centroid.lon
-                };
-            }
-            if (target) {
-                lastActiveTarget = target;
-                const schedule = generateSchedule(target, currentSatrecs, analysisTimeframeHours, sensorConeAngleDeg);
-                lastBlindSpotSchedule = schedule;
-                renderSchedule(scheduleContainer, schedule);
+            renderAnalysisLoader("Blind Spot Detection", "Recalculating 24h orbital coverage gaps...");
+            
+            setTimeout(() => {
+                currentSatrecs = getFilteredSatrecs();
+                let target = focusedSite;
+                if (!target && hasSelectedArea()) {
+                    target = {
+                        name: appState.selectedArea.name || "Traced Region",
+                        lat: appState.selectedArea.centroid.lat,
+                        lon: appState.selectedArea.centroid.lon
+                    };
+                }
+                if (target) {
+                    lastActiveTarget = target;
+                    const schedule = generateSchedule(target, currentSatrecs, analysisTimeframeHours, sensorConeAngleDeg);
+                    lastBlindSpotSchedule = schedule;
 
-                const clock = appState.realTimeClock || new Date();
-                const hasBlindSpots = schedule.length > 0;
-                updateSiteVisuals(clock, currentSatrecs, ctx.shared.viewer, focusedSite, sensorConeAngleDeg, hasBlindSpots);
-                updateTracedAreaVisual(clock, currentSatrecs, ctx.shared.viewer, focusedSite, sensorConeAngleDeg, hasBlindSpots);
+                    // Map local schedule to the standard result format for renderAreaAnalysis
+                    const result = {
+                        analysisType: "blind_spot",
+                        blindWindows: schedule.map(bs => ({
+                            startTime: bs.start.toISOString(),
+                            endTime: bs.end.toISOString(),
+                            durationMinutes: bs.duration
+                        })),
+                        region: {
+                            centroid: { lat: target.lat, lon: target.lon }
+                        },
+                        hasCoverage: schedule.length === 0,
+                        coveragePercentage: schedule.debugMetrics ? schedule.debugMetrics.persistentCoveragePercent : 0,
+                        forecastWindowMinutes: analysisTimeframeHours * 60
+                    };
+                    renderAreaAnalysis(result);
 
-                if (statusBadge) {
-                    if (currentSatrecs.length === 0) {
-                        statusBadge.textContent = "NO SATELLITES SELECTED";
-                        statusBadge.style.color = "var(--severity-warning)";
-                    } else if (schedule.length === 0) {
-                        statusBadge.textContent = "COVERAGE STABLE";
-                        statusBadge.style.color = "var(--severity-success)";
-                    } else {
-                        statusBadge.textContent = "BLIND WINDOWS MAPPED";
-                        statusBadge.style.color = "var(--severity-danger)";
+                    const clock = appState.realTimeClock || new Date();
+                    const hasBlindSpots = schedule.length > 0;
+                    updateSiteVisuals(clock, currentSatrecs, ctx.shared.viewer, focusedSite, sensorConeAngleDeg, hasBlindSpots);
+                    updateTracedAreaVisual(clock, currentSatrecs, ctx.shared.viewer, focusedSite, sensorConeAngleDeg, hasBlindSpots);
+
+                    if (statusBadge) {
+                        if (currentSatrecs.length === 0) {
+                            statusBadge.textContent = "NO SATELLITES SELECTED";
+                            statusBadge.style.color = "var(--severity-warning)";
+                        } else if (schedule.length === 0) {
+                            statusBadge.textContent = "COVERAGE STABLE";
+                            statusBadge.style.color = "var(--severity-success)";
+                        } else {
+                            statusBadge.textContent = "BLIND WINDOWS MAPPED";
+                            statusBadge.style.color = "var(--severity-danger)";
+                        }
                     }
                 }
-            }
 
-            updateCurrentTimeUI();
+                updateCurrentTimeUI();
+            }, 600);
         };
 
         const updateCurrentTimeUI = () => {
@@ -1573,11 +1534,11 @@ export default {
             triggerRecalculate();
         };
 
-        const performSearch = () => {
-            const term = searchInput.value.trim().toLowerCase();
+        const performSearch = async () => {
+            const term = searchInput.value.trim();
             if (!term) return;
 
-            const siteIdx = STRATEGIC_SITES.findIndex(s => s.name.toLowerCase().includes(term));
+            const siteIdx = STRATEGIC_SITES.findIndex(s => s.name.toLowerCase().includes(term.toLowerCase()));
             if (siteIdx !== -1) {
                 focusedSite = STRATEGIC_SITES[siteIdx];
                 ctx.shared.viewer.camera.flyTo({
@@ -1590,55 +1551,69 @@ export default {
                 return;
             }
 
-            if (worldData) {
-                const feature = worldData.features.find(f => {
-                    const name = f.properties.name || f.properties.NAME || f.properties.admin || "";
-                    return name.toLowerCase().includes(term);
+            setStatus(`Searching location "${term}" via geocoder...`);
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(term)}&limit=1`, {
+                    headers: {
+                        "User-Agent": "SDA-Console-Agent (acer.gemini.antigravity@example.com)"
+                    }
                 });
-
-                if (feature) {
-                    const name = feature.properties.name || feature.properties.NAME || feature.properties.admin;
-                    setStatus(`Found ${name}. Calculating coverage...`);
-
-                    let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
-                    const flattened = feature.geometry.type === "MultiPolygon"
-                        ? feature.geometry.coordinates.flat(2)
-                        : feature.geometry.coordinates.flat(1);
-
-                    flattened.forEach(c => {
-                        if (c[1] < minLat) minLat = c[1];
-                        if (c[1] > maxLat) maxLat = c[1];
-                        if (c[0] < minLon) minLon = c[0];
-                        if (c[0] > maxLon) maxLon = c[0];
-                    });
-
-                    const lat = (minLat + maxLat) / 2;
-                    const lon = (minLon + maxLon) / 2;
-
-                    ctx.shared.viewer.camera.flyTo({
-                        destination: Cesium.Cartesian3.fromDegrees(lon, lat, 5000000),
-                        duration: 1.5
-                    });
-
-                    appState.selectedArea = {
-                        name: name,
-                        centroid: { lat, lon },
-                        points: flattened.map(c => ({ lat: c[1], lon: c[0] })),
-                        grid: buildRegionGrid({
-                            bounds: { minLat, maxLat, minLon, maxLon },
-                            points: flattened.map(c => ({ lat: c[1], lon: c[0] }))
-                        }, 100),
-                        bounds: { minLat, maxLat, minLon, maxLon }
-                    };
-
-                    focusedSite = null;
-                    clearGridVisuals(ctx.shared.viewer);
-                    triggerRecalculate();
+                const data = await res.json();
+                
+                if (!Array.isArray(data) || data.length === 0) {
+                    setStatus(`No region or country found for "${term}".`);
                     return;
                 }
-            }
+                
+                const item = data[0];
+                const bbox = item.boundingbox;
+                if (!bbox || bbox.length < 4) {
+                    setStatus("Location does not contain boundary values.");
+                    return;
+                }
 
-            setStatus(`No region or country found for "${term}".`);
+                const minLat = parseFloat(bbox[0]);
+                const maxLat = parseFloat(bbox[1]);
+                const minLon = parseFloat(bbox[2]);
+                const maxLon = parseFloat(bbox[3]);
+
+                const lat = parseFloat(item.lat);
+                const lon = parseFloat(item.lon);
+
+                setStatus(`Found ${item.display_name}. Calculating coverage...`);
+
+                const points = [
+                    { lat: maxLat, lon: minLon },
+                    { lat: maxLat, lon: maxLon },
+                    { lat: minLat, lon: maxLon },
+                    { lat: minLat, lon: minLon }
+                ];
+
+                appState.selectedArea = {
+                    name: item.display_name,
+                    centroid: { lat, lon },
+                    points,
+                    bounds: { minLat, maxLat, minLon, maxLon },
+                    grid: buildRegionGrid({
+                        bounds: { minLat, maxLat, minLon, maxLon },
+                        points
+                    }, 100)
+                };
+                updateSelectedAreaVisual(appState.selectedArea);
+
+                focusedSite = null;
+                clearGridVisuals(ctx.shared.viewer);
+                
+                ctx.shared.viewer.camera.flyTo({
+                    destination: Cesium.Rectangle.fromDegrees(minLon, minLat, maxLon, maxLat),
+                    duration: 1.5
+                });
+
+                triggerRecalculate();
+            } catch (err) {
+                console.error(err);
+                setStatus(`Geocoding search failed for "${term}".`);
+            }
         };
 
         const minimizeBtn = document.getElementById("bsMinimizeBtn");
@@ -1673,6 +1648,7 @@ export default {
                     duration: 1.5
                 });
                 appState.selectedArea = null;
+                updateSelectedAreaVisual(null);
                 clearGridVisuals(ctx.shared.viewer);
                 triggerRecalculate();
                 setStatus(`Monitoring ${focusedSite.name}...`);
@@ -1816,6 +1792,7 @@ export default {
                 scope.dispose();
                 if (tlContainer) tlContainer.innerHTML = "";
                 clearVisuals(ctx.shared.viewer);
+                updateSelectedAreaVisual(null);
                 appState.realTimeMultiplier = 1;
             }
         };

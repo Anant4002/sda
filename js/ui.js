@@ -1,6 +1,7 @@
 import { SATELLITE_FILTER_RESULT_LIMIT } from "./config.js";
 import { elements } from "./dom.js";
 import { appState } from "./state.js";
+import { drawProximityAlerts } from "./viewer.js";
 import {
     buildSatelliteGroups,
     computeBounds,
@@ -118,7 +119,7 @@ export function renderCatalogStatus(status = null, history = []) {
         if (status.scheduler) {
             const nextSync = status.scheduler.nextScheduledSync ? formatDateTime(status.scheduler.nextScheduledSync) : "Unknown";
             const schedulerState = status.scheduler.status || "Unknown";
-            
+
             // Map state to CSS severity classes
             const stateSeverityMap = {
                 HEALTHY: "success",
@@ -194,17 +195,23 @@ export function renderCatalogStatus(status = null, history = []) {
 }
 
 export function renderOperationalAlerts(alerts = []) {
-    if (!elements.operationalAlertSummary || !elements.operationalAlertList) {
+    if (!document.getElementById("operationalAlertSummary") || !elements.analysisPanel) {
         return;
     }
+    const summaryElement = document.getElementById("operationalAlertSummary");
     if (!Array.isArray(alerts) || !alerts.length) {
-        elements.operationalAlertSummary.textContent = "No operational alerts recorded yet.";
-        elements.operationalAlertList.innerHTML = safeHtml`<div class="hint">Conjunction results will appear here after the backend records them.</div>`;
+        summaryElement.textContent = "No operational alerts recorded yet.";
+        elements.analysisPanel.innerHTML = safeHtml`
+            <div class="eyebrow">Tactical Alerts & Event Log</div>
+            <h2>Space Domain Operational Alerts Feed</h2>
+            <p>Real-time conjunction detections, uncooperative manoeuvres, blind spot entries, and regional scan events recorded by backend analytical processors.</p>
+            <div class="hint" style="margin-top: 16px;">Conjunction results will appear here after the backend records them.</div>
+        `;
         return;
     }
 
     // Update summary text
-    elements.operationalAlertSummary.textContent = `${alerts.length} operational alert${alerts.length === 1 ? "" : "s"} loaded from the backend feed.`;
+    summaryElement.textContent = `${alerts.length} operational alert${alerts.length === 1 ? "" : "s"} loaded from the backend feed.`;
 
     // Calculate severity statistics
     const criticalCount = alerts.filter(a => a.severity === "critical").length;
@@ -319,7 +326,7 @@ export function renderOperationalAlerts(alerts = []) {
         }
 
         const metrics = [];
-        
+
         let distanceVal = alert.closestDistanceKm;
         if (!Number.isFinite(distanceVal)) {
             const risks = alert.details?.rawAlert?.details?.strategicRisks || alert.details?.strategicRisks;
@@ -405,7 +412,20 @@ export function renderOperationalAlerts(alerts = []) {
         `;
     }).join("");
 
-    elements.operationalAlertList.innerHTML = statsHeader + cardsHtml;
+    elements.analysisPanel.innerHTML = safeHtml`
+        <div class="eyebrow">Tactical Alerts & Event Log</div>
+        <h2>Space Domain Operational Alerts Feed</h2>
+        <p>Real-time conjunction detections, uncooperative manoeuvres, blind spot entries, and regional scan events recorded by backend analytical processors.</p>
+
+        ${markSafe(statsHeader)}
+
+        <div class="section">
+            <div class="section-title">Active Alert Cards</div>
+            <div class="list">
+                ${markSafe(cardsHtml)}
+            </div>
+        </div>
+    `;
 }
 
 
@@ -479,61 +499,78 @@ export function renderAreaAnalysis(result) {
     const passes = Array.isArray(result.passes) ? result.passes : [];
 
     if (result.analysisType === "blind_spot") {
-        const alertItems = alerts.slice(0, 6).map((alert) => `
-        <strong>${escapeHtml(alert.primaryId)}${alert.secondaryId ? ` / ${escapeHtml(alert.secondaryId)}` : ""}</strong>
-        Closest sampled distance: ${formatNumber(alert.closestDistanceKm, 2)} km<br>
-        ${Number.isFinite(alert.altitudeKm) ? `Altitude: ${formatNumber(alert.altitudeKm, 0)} km<br>` : ""}
-        Time: ${formatDateTime(alert.time || alert.startTime)}
-    `);
+        const windows = Array.isArray(result.blindWindows) ? result.blindWindows : [];
+        const windowRows = windows.map((win) => {
+            const startStr = formatDateTime(win.startTime);
+            const endStr = formatDateTime(win.endTime);
+            const durationText = win.durationMinutes >= 60
+                ? `${Math.floor(win.durationMinutes / 60)}h ${win.durationMinutes % 60}m`
+                : `${win.durationMinutes} min`;
+
+            return `
+                <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
+                    <td style="padding: 10px 4px; font-family: monospace; color: var(--text-main); font-weight: 500;">${startStr}</td>
+                    <td style="padding: 10px 4px; font-family: monospace; color: var(--text-main); font-weight: 500;">${endStr}</td>
+                    <td style="padding: 10px 4px; text-align: right; color: var(--danger); font-weight: bold;">${durationText}</td>
+                </tr>
+            `;
+        }).join("");
+
+        const tableContent = windowRows || `
+            <tr style="border-bottom: none;">
+                <td colspan="3" style="padding: 20px 4px; text-align: center; color: var(--success); font-style: italic;">
+                    No blind spots detected in the current window. Coverage is continuous!
+                </td>
+            </tr>
+        `;
+
+        const tableHtml = `
+            <table style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px;">
+                <thead>
+                    <tr style="border-bottom: 2px solid rgba(111, 226, 255, 0.2); text-align: left; color: var(--text-dim);">
+                        <th style="padding: 8px 4px; font-weight: 600;">Start Time (IST)</th>
+                        <th style="padding: 8px 4px; font-weight: 600;">End Time (IST)</th>
+                        <th style="padding: 8px 4px; text-align: right; font-weight: 600;">Duration</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tableContent}
+                </tbody>
+            </table>
+        `;
 
         elements.analysisPanel.innerHTML = safeHtml`
             <div class="eyebrow">${escapeHtml(analysisLabel)}</div>
             <h2>${formatLatitude((result.region || result.area).centroid.lat)} , ${formatLongitude((result.region || result.area).centroid.lon)}</h2>
-            <p>Computed blind spot assessment for the selected region. Results remain stable until the next operator recalculation.</p>
+            <p>Simplified blind spot coverage report for the selected region. Showing periods where no satellite observation coverage exists.</p>
 
             <div class="metric-grid">
                 <div class="metric-card">
-                    <div class="label">Trace Points</div>
-                    <div class="value">${result.region?.points?.length || result.area.points.length}</div>
+                    <div class="label">Total Blind Gaps</div>
+                    <div class="value">${windows.length}</div>
                 </div>
                 <div class="metric-card">
-                    <div class="label">Visibility</div>
-                    <div class="value">${thresholdLabel}°</div>
-                </div>
-                <div class="metric-card">
-                    <div class="label">Forecast</div>
-                    <div class="value">${forecastMinutes}m</div>
-                </div>
-                <div class="metric-card">
-                    <div class="label">Assessment</div>
-                    <div class="value">${result.hasCoverage ? "COVERED" : "BLIND"}</div>
-                </div>
-                <div class="metric-card">
-                    <div class="label">Satellites</div>
-                    <div class="value">${result.evaluatedSatelliteCount}</div>
-                </div>
-                <div class="metric-card">
-                    <div class="label">Altitude Window</div>
-                    <div class="value">${formatNumber(minAltitude, 0)}-${formatNumber(maxAltitude, 0)} km</div>
-                </div>
-            </div>
-
-            <div class="section">
-                <div class="section-title">Detection Result</div>
-                <div class="list">
-                    <div class="list-item ${result.hasCoverage ? "success" : "danger"}">
-                        <strong>${result.hasCoverage ? "Coverage Stable" : "Blind Window Confirmed"}</strong>
-                        ${result.hasCoverage ? "At least one satellite provides visibility coverage in this region for the computed window." : "No satellite provides adequate visibility coverage in this region for the computed window."}
+                    <div class="label">Overall Status</div>
+                    <div class="value" style="color: ${result.hasCoverage ? 'var(--severity-success)' : 'var(--severity-danger)'};">
+                        ${result.hasCoverage ? "COVERED" : "BLIND"}
                     </div>
                 </div>
+                <div class="metric-card">
+                    <div class="label">Coverage</div>
+                    <div class="value">${formatNumber(result.coveragePercentage || 0, 1)}%</div>
+                </div>
+                <div class="metric-card">
+                    <div class="label">Forecast Window</div>
+                    <div class="value">${result.forecastWindowMinutes}m</div>
+                </div>
             </div>
 
-            ${alerts.length ? `
             <div class="section">
-                <div class="section-title">Blind Spot Alerts</div>
-                ${buildList(alertItems, "No blind spot alerts generated.", "warning")}
+                <div class="section-title">Simplified Blind Spot Schedule</div>
+                <div class="list">
+                    ${markSafe(tableHtml)}
+                </div>
             </div>
-            ` : ""}
         `;
         return;
     }
@@ -546,26 +583,15 @@ export function renderAreaAnalysis(result) {
     `);
 
     if (result.analysisType === "volumetric_scan") {
-        const tableRows = passes.slice(0, 15).map((pass) => `
-            <div class="list-item ${pass.isIndian ? "indian" : ""}">
-                <strong>${escapeHtml(pass.id)} (NORAD: ${pass.noradId || "N/A"})</strong>
-                <div style="font-size: 0.9em; margin-top: 5px; color: var(--text-dim);">
-                    Entry: ${formatDateTime(pass.startTime)}<br>
-                    Exit: ${formatDateTime(pass.endTime)}<br>
-                    Peak Alt: ${formatNumber(pass.peakAltitudeKm ?? 0, 1)} km
-                </div>
-            </div>
-        `).join("");
-
         elements.analysisPanel.innerHTML = safeHtml`
             <div class="eyebrow">${escapeHtml(analysisLabel)}</div>
             <h2>${formatLatitude((result.region || result.area).centroid.lat)} , ${formatLongitude((result.region || result.area).centroid.lon)}</h2>
-            <p>Volumetric scan identified ${passes.length} satellites passing through the defined 3D volume (traced region + altitude window) within the forecast period.</p>
+            <p>Volumetric scan identified <span class="volumetric-total-passes-val">${passes.length}</span> satellites passing through the defined 3D volume (traced region + altitude window) within the forecast period.</p>
 
             <div class="metric-grid">
                 <div class="metric-card">
                     <div class="label">Total Passes</div>
-                    <div class="value">${passes.length}</div>
+                    <div class="value volumetric-total-passes-val">${passes.length}</div>
                 </div>
                 <div class="metric-card">
                     <div class="label">Forecast</div>
@@ -577,13 +603,111 @@ export function renderAreaAnalysis(result) {
                 </div>
             </div>
 
+            <div class="section" style="background: rgba(255, 255, 255, 0.02); padding: 12px; border-radius: 8px; margin-top: 12px; margin-bottom: 12px;">
+                <div class="section-title">Filter Results</div>
+                <div class="field" style="margin-bottom: 8px;">
+                    <input id="volumetricSearchInput" class="search-input" type="search" placeholder="Search satellite name or ID..." style="width: 100%;">
+                </div>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                    <button class="badge badge-success volumetric-filter-btn active" data-filter="all" style="cursor: pointer; border: none;">All</button>
+                    <button class="badge badge-outline volumetric-filter-btn" data-filter="indian" style="cursor: pointer; border: 1px solid rgba(111,226,255,0.3); background: none;">India</button>
+                    <button class="badge badge-outline volumetric-filter-btn" data-filter="friendly" style="cursor: pointer; border: 1px solid rgba(111,226,255,0.3); background: none;">Friendly</button>
+                    <button class="badge badge-outline volumetric-filter-btn" data-filter="adversary" style="cursor: pointer; border: 1px solid rgba(111,226,255,0.3); background: none;">Adversary</button>
+                </div>
+            </div>
+
             <div class="section">
                 <div class="section-title">Object Pass Timeline</div>
-                <div class="list">
-                    ${markSafe(tableRows || '<div class="hint">No objects detected passing through the selected volume.</div>')}
+                <div class="list volumetric-pass-list">
+                    <!-- Will be populated dynamically by refreshVolumetricList -->
                 </div>
             </div>
         `;
+
+        const refreshVolumetricList = () => {
+            const searchInput = document.getElementById("volumetricSearchInput");
+            const activeBtn = elements.analysisPanel.querySelector(".volumetric-filter-btn.active");
+            const filter = activeBtn ? activeBtn.dataset.filter : "all";
+            const query = (searchInput?.value || "").toUpperCase().trim();
+
+            let filtered = passes;
+
+            // Apply search filter
+            if (query) {
+                filtered = filtered.filter(p =>
+                    p.id.toUpperCase().includes(query) ||
+                    (p.noradId && String(p.noradId).includes(query))
+                );
+            }
+
+            // Apply country filter
+            if (filter !== "all") {
+                filtered = filtered.filter(p => {
+                    const name = p.id.toUpperCase();
+                    if (filter === "indian") {
+                        return p.isIndian;
+                    } else if (filter === "friendly") {
+                        const friendlyList = appState.friendlySatellites || ["GPS", "NOAA", "USA", "GOES", "LANDSAT"];
+                        return friendlyList.some(pat => name.includes(pat.toUpperCase().trim()));
+                    } else if (filter === "adversary") {
+                        const adversaryList = ["YAOGAN", "FENGYUN", "SJ-", "SHIYAN", "BEIDOU"];
+                        return adversaryList.some(pat => name.includes(pat.toUpperCase().trim()));
+                    }
+                    return true;
+                });
+            }
+
+            // Update the listed rows
+            const listContainer = elements.analysisPanel.querySelector(".volumetric-pass-list");
+            if (listContainer) {
+                if (filtered.length === 0) {
+                    listContainer.innerHTML = `<div class="hint">No matching passes found.</div>`;
+                } else {
+                    listContainer.innerHTML = filtered.slice(0, 30).map((pass) => `
+                        <div class="list-item ${pass.isIndian ? "indian" : ""}">
+                            <strong>${escapeHtml(pass.id)} (NORAD: ${pass.noradId || "N/A"})</strong>
+                            <div style="font-size: 0.9em; margin-top: 5px; color: var(--text-dim);">
+                                Entry: ${formatDateTime(pass.startTime)}<br>
+                                Exit: ${formatDateTime(pass.endTime)}<br>
+                                Peak Alt: ${formatNumber(pass.peakAltitudeKm ?? 0, 1)} km
+                            </div>
+                        </div>
+                    `).join("");
+                }
+            }
+
+            // Update visible count in UI
+            const countValues = elements.analysisPanel.querySelectorAll(".volumetric-total-passes-val");
+            countValues.forEach(el => {
+                el.textContent = filtered.length;
+            });
+        };
+
+        // Initialize and bind
+        refreshVolumetricList();
+
+        setTimeout(() => {
+            const searchInput = document.getElementById("volumetricSearchInput");
+            if (searchInput) {
+                searchInput.addEventListener("input", refreshVolumetricList);
+            }
+            const btns = elements.analysisPanel.querySelectorAll(".volumetric-filter-btn");
+            btns.forEach(btn => {
+                btn.addEventListener("click", () => {
+                    btns.forEach(b => {
+                        b.classList.remove("active", "badge-success");
+                        b.classList.add("badge-outline");
+                        b.style.background = "none";
+                        b.style.border = "1px solid rgba(111,226,255,0.3)";
+                    });
+                    btn.classList.add("active", "badge-success");
+                    btn.classList.remove("badge-outline");
+                    btn.style.background = "";
+                    btn.style.border = "none";
+                    refreshVolumetricList();
+                });
+            });
+        }, 0);
         return;
     }
 
@@ -595,15 +719,32 @@ export function renderAreaAnalysis(result) {
             const pcFormatted = conj.collisionProbability < 1e-7 ? " < 1e-7" : conj.collisionProbability.toExponential(2);
             const severity = conj.collisionProbability > 1e-4 ? "critical" : "warning";
 
+            // Analyze relative velocity
+            const relVel = conj.relativeVelocityKmS || 0;
+            let velAnalysis = "";
+            let velColor = "var(--severity-success)";
+            if (relVel < 2.0) {
+                velAnalysis = "Co-orbital / station-keeping trailing trajectory approach. Lower collision energy.";
+            } else if (relVel <= 8.0) {
+                velColor = "var(--severity-warning)";
+                velAnalysis = "Crossing orbits trajectory intercept. High potential impact energy.";
+            } else {
+                velColor = "var(--severity-danger)";
+                velAnalysis = "Hypervelocity head-on intercept trajectory intercept. Severe fragmentation hazard.";
+            }
+
             return `
                 <div class="list-item ${severity === "critical" ? "danger" : "warning"} indian"
                      style="cursor: pointer;"
                      data-conj-index="${idx}">
                     <strong>${escapeHtml(conj.primaryId)} ↔ ${escapeHtml(conj.secondaryId)}</strong>
-                    <div style="font-size: 0.9em; margin-top: 5px; color: var(--text-dim);">
+                    <div style="font-size: 0.9em; margin-top: 5px; color: var(--text-dim); line-height: 1.4;">
                         Probability (Pc): <strong style="color: currentColor;">${pcFormatted}</strong><br>
                         Miss Distance: ${formatNumber(conj.closestDistanceKm, 2)} km<br>
-                        Rel. Velocity: ${formatNumber(conj.relativeVelocityKmS || 0, 3)} km/s<br>
+                        Rel. Velocity: <strong style="color: ${velColor};">${formatNumber(relVel, 3)} km/s</strong><br>
+                        <span style="font-size: 0.85em; display: block; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 4px; color: var(--text-dim);">
+                            <strong>Analysis:</strong> ${velAnalysis}
+                        </span>
                         TCA (UTC): ${formatDateTime(conj.time)}
                     </div>
                 </div>
@@ -654,13 +795,30 @@ export function renderAreaAnalysis(result) {
 
             const pcFormatted = (conj.collisionProbability || 0).toExponential(1);
 
+            // Compute orbital region from ECI coordinates or use backend orbitClass if available
+            let regionName = conj.orbitClass;
+            if (!regionName) {
+                const x = conj.primaryPos?.x || 0;
+                const y = conj.primaryPos?.y || 0;
+                const z = conj.primaryPos?.z || 0;
+                const distFromCenter = Math.sqrt(x*x + y*y + z*z);
+                const alt = distFromCenter - 6371; // Earth radius subtraction
+                if (alt < 2000) regionName = "LEO";
+                else if (alt > 36786) regionName = "HEO";
+                else if (Math.abs(alt - 35786) < 1000) regionName = "GEO";
+                else regionName = "MEO";
+            }
+
             return `
                 <div class="list-item ${severityClass} ${conj.primaryIsIndian || conj.secondaryIsIndian ? "indian" : ""}"
                      style="cursor: pointer;"
                      data-conj-index="${idx}">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                         <strong>${escapeHtml(conj.primaryId)} ↔ ${escapeHtml(conj.secondaryId)}</strong>
-                        <span class="badge badge-${severityClass}">${conj.severity.toUpperCase()}</span>
+                        <div>
+                            <span class="badge badge-outline" style="border-color: rgba(111,226,255,0.3); color: var(--accent);">${regionName}</span>
+                            <span class="badge badge-${severityClass}">${conj.severity.toUpperCase()}</span>
+                        </div>
                     </div>
                     <div style="font-size: 0.85em; margin-top: 6px; color: var(--text-dim); display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
                         <span>Miss: <strong style="color:white">${formatNumber(conj.closestDistanceKm, 2)} km</strong></span>
@@ -675,7 +833,7 @@ export function renderAreaAnalysis(result) {
         elements.analysisPanel.innerHTML = safeHtml`
             <div class="eyebrow">${escapeHtml(analysisLabel)}</div>
             <h2>Operational Conjunction Report</h2>
-            <p>Operational conjunction screening identifying high-risk close approaches. Results are ranked by minimum separation distance and collision probability (Pc).</p>
+            <p>Operational conjunction screening identifying close-approach events. Conjunction calculations remain active across the catalog.</p>
 
             <div class="metric-grid">
                 <div class="metric-card">
@@ -693,6 +851,24 @@ export function renderAreaAnalysis(result) {
                 <div class="metric-card">
                     <div class="label">Window</div>
                     <div class="value">${forecastMinutes >= 1440 ? (forecastMinutes / 1440).toFixed(0) + "d" : (forecastMinutes / 60).toFixed(0) + "h"}</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Operational Context & Benefits</div>
+                <div class="micro-card" style="font-size: 0.85em; line-height: 1.45; color: var(--text-dim);">
+                    <strong>Why Conjunctions are Tracked:</strong> Close passes must be detected proactively to prevent high-velocity orbital impacts that can instantly destroy multi-million dollar national assets.
+                    <br><br>
+                    <strong>Operational Benefit:</strong> Allows operators to execute timely <em>Collision Avoidance Maneuvers (COLA)</em>, conserving satellite fuel and preserving active space payloads.
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Space Catalog Statistical Insights</div>
+                <div class="micro-card" style="font-size: 0.85em; line-height: 1.45; color: var(--text-dim);">
+                    • <strong>Historical Collision Events:</strong> 4 major catastrophic satellite collisions have occurred historically (e.g. the 2009 co-orbital impact of Iridium 33 & Kosmos 2251).
+                    <br>
+                    • <strong>Tracked Satellites & Debris:</strong> Over 47,000 active orbital objects are currently catalogued and tracked daily, with millions of smaller lethal untracked debris particles posing risk.
                 </div>
             </div>
 
@@ -916,7 +1092,9 @@ export function renderReentryIntelligence(data) {
         riskLevel,
         status,
         message,
-        history = []
+        history = [],
+        timeToImpact,
+        indiaSpecificRisk
     } = data;
 
     const riskSeverity = riskLevel === "HIGH" ? "badge-danger" : (riskLevel === "ELEVATED" ? "badge-warning" : (riskLevel === "MONITOR" ? "badge-monitor" : "badge-success"));
@@ -935,6 +1113,8 @@ export function renderReentryIntelligence(data) {
             Strategic installation at risk. Projected impact corridor passes within ${formatNumber(risk.distanceKm, 0)} km.
         </div>
     `).join("") : '<div class="list-item success">No strategic installation risks detected in current impact corridor.</div>';
+
+    const riskColor = indiaSpecificRisk && (indiaSpecificRisk.includes("Threat") || indiaSpecificRisk.includes("at risk")) ? "var(--danger)" : "var(--text-bright)";
 
     elements.analysisPanel.innerHTML = safeHtml`
         <div class="eyebrow">Orbital Decay Intelligence & Re-entry Prediction</div>
@@ -961,6 +1141,32 @@ export function renderReentryIntelligence(data) {
             <div class="metric-card">
                 <div class="label">Uncertainty</div>
                 <div class="value">${status === "stable" ? "None" : escapeHtml(reentryWindow || "N/A")}</div>
+            </div>
+        </div>
+
+        <div class="forecast-callout-card" style="margin-top: 16px; margin-bottom: 16px; padding: 16px; background: linear-gradient(135deg, rgba(14, 42, 71, 0.6) 0%, rgba(6, 17, 33, 0.8) 100%); border: 1px solid rgba(111, 226, 255, 0.25); border-radius: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35); position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 10px;">
+            <div style="position: absolute; right: -15px; top: -15px; width: 80px; height: 80px; background: radial-gradient(circle, rgba(111, 226, 255, 0.08) 0%, transparent 70%); pointer-events: none;"></div>
+
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--accent);">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span style="text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.78em; font-weight: 700; color: var(--text-bright);">Decay & Impact Forecast Summary</span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 16px;">
+                <div style="border-right: 1px solid rgba(255, 255, 255, 0.08); padding-right: 12px;">
+                    <div style="font-size: 0.75em; color: var(--text-dim); text-transform: uppercase; margin-bottom: 2px;">Est. Time Remaining</div>
+                    <div style="font-family: var(--font-mono); font-size: 1.15em; font-weight: bold; color: var(--text-warning);">${timeToImpact || "Unknown"}</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.75em; color: var(--text-dim); text-transform: uppercase; margin-bottom: 2px;">India-Specific Risk Assessment</div>
+                    <div style="font-size: 0.85em; font-weight: 500; color: ${riskColor}; line-height: 1.3;">
+                        ${indiaSpecificRisk || "No immediate tactical threat identified."}
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -1132,9 +1338,50 @@ export function renderSatelliteDirectory(toggleSatellitePath, hideGroup, clearHi
     if (!elements.indianSummary || !elements.indianSatList || !elements.satelliteSearchInput) {
         return;
     }
-    const satellites = appState.hideCommercialSatellites
-        ? appState.satellites.filter((satellite) => !isCommercialSatelliteName(satellite.name))
-        : appState.satellites;
+
+    // Apply all active filters to the directory list to keep sidebar and globe in sync
+    let satellites = appState.satellites;
+
+    if (appState.hideCommercialSatellites) {
+        satellites = satellites.filter((satellite) => !isCommercialSatelliteName(satellite.name));
+    }
+
+    if (appState.addedLast30Days) {
+        const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+        satellites = satellites.filter((s) => s.firstAddedAt && new Date(s.firstAddedAt).getTime() >= thirtyDaysAgo);
+    }
+
+    if (appState.showOnlyIndian) {
+        satellites = satellites.filter((s) => s.isIndian);
+    }
+
+    if (appState.orbitClassFilter) {
+        satellites = satellites.filter((s) => {
+            const orbitClass = s.characterisation?.orbitClass || "Unknown";
+            return appState.orbitClassFilter[orbitClass] !== false;
+        });
+    }
+
+    if (appState.orbitCountryFilter && appState.orbitCountryFilter !== "all") {
+        satellites = satellites.filter((s) => {
+            const satName = s.name.toUpperCase();
+            if (appState.orbitCountryFilter === "indian") {
+                return s.isIndian;
+            } else if (appState.orbitCountryFilter === "friendly") {
+                const friendlyList = appState.friendlySatellites || [];
+                return friendlyList.some(p => satName.includes(p.toUpperCase().trim()));
+            } else if (appState.orbitCountryFilter === "adversary") {
+                const adversaryList = appState.adversarySatellites || [];
+                return adversaryList.some(p => satName.includes(p.toUpperCase().trim()));
+            }
+            return true;
+        });
+    }
+
+    if (appState.volumetricScanActive && appState.volumetricRelevantSats) {
+        satellites = satellites.filter((s) => appState.volumetricRelevantSats.has(s.name));
+    }
+
     const groups = buildSatelliteGroups(satellites);
     const query = normalizeSearchValue(elements.satelliteSearchInput.value);
     const filteredGroups = groups.filter((group) => !query || group.label.includes(query));
@@ -1208,4 +1455,432 @@ export function renderSatelliteDirectory(toggleSatellitePath, hideGroup, clearHi
     if (elements.resetHiddenGroupsButton) {
         elements.resetHiddenGroupsButton.onclick = clearHiddenGroups;
     }
+}
+
+export function renderNeighbourhoodWatchAnalysis(result) {
+    if (!elements.analysisPanel) {
+        return;
+    }
+
+    if (!result || !Array.isArray(result.alerts)) {
+        elements.analysisPanel.innerHTML = safeHtml`
+            <div class="eyebrow">Neighbourhood Watch</div>
+            <h2>Screening Results</h2>
+            <p class="hint">No proximity events detected within the selected parameters.</p>
+        `;
+        return;
+    }
+
+    const scopeText = result.isGlobal ? "All Indian Assets" : result.primaryId;
+    const passes = result.alerts || [];
+
+    const renderFilteredList = () => {
+        const severitySelect = document.getElementById("watchSeverityFilter");
+        const distInput = document.getElementById("watchDistanceInput");
+        const searchInput = document.getElementById("watchSearchInput");
+
+        const severity = severitySelect?.value || "all";
+        const maxDistVal = distInput?.value;
+        const maxDist = maxDistVal ? Number(maxDistVal) : Infinity;
+        const nameSearch = (searchInput?.value || "").toLowerCase().trim();
+
+        let filtered = passes;
+
+        if (severity === "critical") {
+            filtered = filtered.filter(a => a.severity === "critical");
+        } else if (severity === "warning") {
+            filtered = filtered.filter(a => a.severity === "critical" || a.severity === "warning");
+        } else if (severity === "routine") {
+            filtered = filtered.filter(a => a.severity !== "critical" && a.severity !== "warning");
+        }
+
+        if (Number.isFinite(maxDist) && maxDist > 0) {
+            filtered = filtered.filter(a => a.closestDistanceKm <= maxDist);
+        }
+
+        if (nameSearch) {
+            filtered = filtered.filter(a =>
+                (a.primaryId && a.primaryId.toLowerCase().includes(nameSearch)) ||
+                (a.secondaryId && a.secondaryId.toLowerCase().includes(nameSearch))
+            );
+        }
+
+        // Draw Globe markers matching current filtered set
+        drawProximityAlerts(filtered);
+
+        // Update counts in metric grid
+        const critVal = elements.analysisPanel.querySelector(".watch-crit-val");
+        const warnVal = elements.analysisPanel.querySelector(".watch-warn-val");
+        const routVal = elements.analysisPanel.querySelector(".watch-rout-val");
+        const totalVal = elements.analysisPanel.querySelector(".watch-total-val");
+
+        if (critVal) critVal.textContent = filtered.filter(a => a.severity === "critical").length;
+        if (warnVal) warnVal.textContent = filtered.filter(a => a.severity === "warning").length;
+        if (routVal) routVal.textContent = filtered.filter(a => a.severity !== "critical" && a.severity !== "warning").length;
+        if (totalVal) totalVal.textContent = filtered.length;
+
+        // Render the list
+        const listContainer = elements.analysisPanel.querySelector(".neighbourhood-watch-list");
+        if (listContainer) {
+            if (filtered.length === 0) {
+                listContainer.innerHTML = `<div class="hint">No matching proximity events found.</div>`;
+            } else {
+                listContainer.innerHTML = filtered.map((alert) => {
+                    let severityClass = "info";
+                    let badgeClass = "badge-info";
+                    let label = "ROUTINE";
+
+                    if (alert.severity === "critical") {
+                        severityClass = "danger";
+                        badgeClass = "badge-danger";
+                        label = "CRITICAL";
+                    } else if (alert.severity === "warning") {
+                        severityClass = "warning";
+                        badgeClass = "badge-warning";
+                        label = "WARNING";
+                    }
+
+                    return `
+                        <div class="list-item ${severityClass}">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                                <strong>${escapeHtml(alert.primaryId)} ↔ ${escapeHtml(alert.secondaryId)}</strong>
+                                <span class="badge ${badgeClass}">${label}</span>
+                            </div>
+                            <div style="font-size: 0.9em; margin-top: 5px; color: var(--text-dim);">
+                                Distance: <strong>${formatNumber(alert.closestDistanceKm, 2)} km</strong><br>
+                                Rel. Velocity: ${Number.isFinite(alert.relativeVelocityKmS) ? `${formatNumber(alert.relativeVelocityKmS, 3)} km/s` : "N/A"}<br>
+                                Time (UTC): ${formatDateTime(alert.time)}
+                            </div>
+                        </div>
+                    `;
+                }).join("");
+            }
+        }
+    };
+
+    // Calculate initial severity statistics
+    const initialCritical = passes.filter(a => a.severity === "critical").length;
+    const initialWarning = passes.filter(a => a.severity === "warning").length;
+    const initialRoutine = passes.filter(a => a.severity !== "critical" && a.warning !== "warning").length;
+
+    elements.analysisPanel.innerHTML = safeHtml`
+        <div class="eyebrow">Neighbourhood Watch</div>
+        <h2>${escapeHtml(scopeText)}</h2>
+        <p>Proximity screening detected <span class="watch-total-val">${passes.length}</span> events within ${formatNumber(result.thresholdKm, 0)} km.</p>
+
+        <div class="metric-grid">
+            <div class="metric-card">
+                <div class="label">Critical</div>
+                <div class="value watch-crit-val" style="color: var(--severity-danger)">${initialCritical}</div>
+            </div>
+            <div class="metric-card">
+                <div class="label">Warning</div>
+                <div class="value watch-warn-val" style="color: var(--severity-warning)">${initialWarning}</div>
+            </div>
+            <div class="metric-card">
+                <div class="label">Routine</div>
+                <div class="value watch-rout-val" style="color: var(--severity-info)">${initialRoutine}</div>
+            </div>
+            <div class="metric-card">
+                <div class="label">Threshold</div>
+                <div class="value">${formatNumber(result.thresholdKm, 0)} km</div>
+            </div>
+        </div>
+
+        <div class="section" style="background: rgba(255, 255, 255, 0.02); padding: 12px; border-radius: 8px; margin-bottom: 12px; margin-top: 12px;">
+            <div class="section-title">Advanced Result Filters</div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <div class="field" style="flex: 1; min-width: 120px;">
+                    <label for="watchSeverityFilter" style="font-size: 11px;">Severity</label>
+                    <select id="watchSeverityFilter" style="padding: 6px 10px; font-size: 12px; width: 100%;">
+                        <option value="all">All Severities</option>
+                        <option value="critical">Critical Only</option>
+                        <option value="warning">Warning & Critical</option>
+                        <option value="routine">Routine Only</option>
+                    </select>
+                </div>
+                <div class="field" style="flex: 1; min-width: 120px;">
+                    <label for="watchDistanceInput" style="font-size: 11px;">Max Distance (km)</label>
+                    <input id="watchDistanceInput" type="number" placeholder="Distance..." style="padding: 6px 10px; font-size: 12px; width: 100%;">
+                </div>
+                <div class="field" style="flex: 2; min-width: 180px;">
+                    <label for="watchSearchInput" style="font-size: 11px;">Name Search</label>
+                    <input id="watchSearchInput" type="search" placeholder="Search satellite..." class="search-input" style="padding: 6px 10px; font-size: 12px; width: 100%;">
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Detected Proximity Events</div>
+            <div class="list neighbourhood-watch-list">
+                <!-- Will be populated by renderFilteredList -->
+            </div>
+        </div>
+    `;
+
+    // Render list initially
+    renderFilteredList();
+
+    // Bind event listeners with a slight delay
+    setTimeout(() => {
+        const severitySelect = document.getElementById("watchSeverityFilter");
+        const distInput = document.getElementById("watchDistanceInput");
+        const searchInput = document.getElementById("watchSearchInput");
+
+        if (severitySelect) severitySelect.addEventListener("change", renderFilteredList);
+        if (distInput) distInput.addEventListener("input", renderFilteredList);
+        if (searchInput) searchInput.addEventListener("input", renderFilteredList);
+    }, 0);
+}
+
+export function renderAnalysisLoader(moduleName, description = "Running advanced orbital computations...") {
+    if (!elements.analysisPanel) {
+        return;
+    }
+
+    elements.analysisPanel.innerHTML = safeHtml`
+        <div class="eyebrow">${escapeHtml(moduleName)}</div>
+        <div class="loader-container">
+            <div class="loader-spinner"></div>
+            <div class="loader-text">Executing Analysis</div>
+            <div class="loader-subtext">${escapeHtml(description)}</div>
+        </div>
+    `;
+}
+
+export function renderDriftAnalysis(drift) {
+    if (!elements.analysisPanel || !drift || !drift.analysis) return;
+    const a = drift.analysis;
+    const tracks = drift.tracks || [];
+    let longDrift = 0;
+    let groundTrackDisp = 0;
+
+    if (tracks.length >= 2) {
+        const oldestTrack = [...tracks].sort((a,b) => a.dayOffset - b.dayOffset)[0];
+        const latestTrack = [...tracks].sort((a,b) => b.dayOffset - a.dayOffset)[0];
+
+        const oldest = oldestTrack.samples[0];
+        const latest = latestTrack.samples[0];
+
+        if (oldest && latest) {
+            longDrift = latest.lon - oldest.lon;
+            const p1 = new Cesium.Cartesian3(oldest.x, oldest.y, oldest.z);
+            const p2 = new Cesium.Cartesian3(latest.x, latest.y, latest.z);
+            groundTrackDisp = Cesium.Cartesian3.distance(p1, p2) / 1000;
+        }
+    }
+
+    let narrative = "";
+    const lonAbs = Math.abs(longDrift);
+    const driftDir = longDrift > 0 ? "eastward" : "westward";
+
+    if (lonAbs > 0.05) {
+        narrative += `Satellite is <strong>drifting ${driftDir}</strong> (${lonAbs.toFixed(2)}° over ${a.daysAnalyzed} days). `;
+    } else {
+        narrative += `Satellite maintaining <strong>stable longitudinal station</strong>. `;
+    }
+
+    if (Math.abs(a.smaShiftKm) > 1) {
+        narrative += `Orbital altitude has <strong>${a.smaShiftKm > 0 ? "increased" : "decreased"}</strong> by ${Math.abs(a.smaShiftKm).toFixed(1)} km, suggesting ${Math.abs(a.smaShiftKm) > 5 ? "a major manoeuvre" : "station-keeping activity"}. `;
+    }
+
+    const indiaLon = [68, 97];
+    const currentLon = tracks.find(t => t.dayOffset === 0)?.samples[0]?.lon;
+    if (currentLon >= indiaLon[0] && currentLon <= indiaLon[1]) {
+        narrative += `Object currently has <strong>active coverage over Indian airspace</strong>. `;
+    } else if (longDrift > 0 && currentLon < indiaLon[0]) {
+        narrative += `Object is <strong>approaching Indian regional coverage</strong> from the west. `;
+    } else if (longDrift < 0 && currentLon > indiaLon[1]) {
+        narrative += `Object is <strong>approaching Indian regional coverage</strong> from the east. `;
+    }
+
+    // Generate Legend HTML
+    const sortedTracks = [...tracks].sort((a, b) => a.dayOffset - b.dayOffset);
+    const legendHtml = sortedTracks.map((t) => `
+        <div style="display: flex; flex-direction: column; align-items: center; min-width: 55px; gap: 4px; position: relative;">
+            <div style="width: 100%; height: 4px; background-color: ${t.color}; border-radius: 2px;"></div>
+            <span style="font-size: 0.8em; font-family: monospace; color: ${t.isCurrent ? "var(--text-main)" : "var(--text-dim)"};">${t.dayOffset === 0 ? "Now" : `${t.dayOffset}d ago`}</span>
+        </div>
+    `).join('<div style="color: var(--text-dim); font-size: 0.8em; margin: 0 4px; align-self: center;">&rarr;</div>');
+
+    elements.analysisPanel.innerHTML = safeHtml`
+        <div class="eyebrow">Orbital Drift Overlay & Temporal Intelligence</div>
+        <h2>Drift Evolution: ${escapeHtml(drift.satelliteId || "Active Satellite")}</h2>
+        <p>Layered historical trajectories analyze how the satellite's orbital plane and altitude evolve over a multi-epoch timeline.</p>
+
+        <div class="metric-grid">
+            <div class="metric-card">
+                <div class="label">Inclination Shift</div>
+                <div class="value">${a.inclinationShiftDeg >= 0 ? "+" : ""}${a.inclinationShiftDeg.toFixed(4)}°</div>
+            </div>
+            <div class="metric-card">
+                <div class="label">Altitude Delta</div>
+                <div class="value">${a.smaShiftKm >= 0 ? "+" : ""}${a.smaShiftKm.toFixed(2)} km</div>
+            </div>
+            <div class="metric-card">
+                <div class="label">Long. Drift</div>
+                <div class="value">${longDrift >= 0 ? "+" : ""}${longDrift.toFixed(3)}°</div>
+            </div>
+            <div class="metric-card">
+                <div class="label">Ground Displacement</div>
+                <div class="value">${groundTrackDisp.toFixed(1)} km</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Drift Intelligence Narrative</div>
+            <div class="micro-card" style="border-left: 3px solid var(--text-success); background: rgba(124, 242, 154, 0.05); line-height: 1.5; font-size: 13.5px;">
+                ${markSafe(narrative)}
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Temporal Legend & Color Coding</div>
+            <div class="micro-card" style="display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; padding: 16px;">
+                ${markSafe(legendHtml)}
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Operational Context & Drift Importance</div>
+            <div class="micro-card" style="font-size: 0.85em; line-height: 1.45; color: var(--text-dim);">
+                <strong>Drift Tracking:</strong> Orbital drift occurs due to atmospheric drag, solar radiation pressure, and Earth's gravitational anomalies (J2 perturbation).
+                <br><br>
+                <strong>Threat Recognition:</strong> A sudden deviation in longitudinal drift rate without atmospheric cause is a prime signature of uncooperative thruster firings (manoeuvres) designed to reposition reconnaissance assets.
+            </div>
+        </div>
+    `;
+}
+
+export function renderManoeuvreAnalysis(result) {
+    if (!elements.analysisPanel || !result) return;
+    const severity = result.severity || "info";
+    const deltas = result.deltas || {};
+    const severityClass = severity === "critical" ? "danger" :
+                          severity === "high" ? "warning" :
+                          severity === "medium" ? "monitor" : "success";
+
+    elements.analysisPanel.innerHTML = safeHtml`
+        <div class="eyebrow">Manoeuvre Signature & Threat Assessment</div>
+        <h2>Manoeuvre Detected: ${escapeHtml(result.satelliteId || "Active Satellite")}</h2>
+        <p>Comparison of predicted trajectory (from older TLE epoch) against actual observed trajectory (from recent TLE epoch) to isolate uncooperative station-keeping or intercept firings.</p>
+
+        <div class="badge-row" style="margin-bottom: 16px;">
+            <span class="badge badge-${severityClass}">${escapeHtml(result.classification.toUpperCase().replace('_', ' '))}</span>
+            <span class="badge badge-outline">Threat Score: ${result.threatScore}</span>
+        </div>
+
+        <div class="metric-grid">
+            <div class="metric-card">
+                <div class="label">SMA Shift</div>
+                <div class="value" style="color: white;">${deltas.semiMajorAxisKm.toFixed(2)} km</div>
+            </div>
+            <div class="metric-card">
+                <div class="label">Inclination Shift</div>
+                <div class="value" style="color: white;">${deltas.inclinationDeg.toFixed(4)}°</div>
+            </div>
+            <div class="metric-card">
+                <div class="label">Eccentricity Delta</div>
+                <div class="value" style="font-size: 13.5px; color: white;">${deltas.eccentricity.toFixed(6)}</div>
+            </div>
+            <div class="metric-card">
+                <div class="label">Position Residual</div>
+                <div class="value" style="color: white;">${result.epochResidualKm.toFixed(1)} km</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Assessment Narrative</div>
+            <div class="micro-card" style="border-left: 3px solid var(--severity-${severityClass}); font-style: italic; font-size: 13.5px; line-height: 1.5; background: rgba(255,255,255,0.02);">
+                "${escapeHtml(result.assessment)}"
+            </div>
+        </div>
+
+        ${result.proximity?.nearestIndianId ? markSafe(`
+            <div class="section">
+                <div class="section-title" style="color: var(--severity-danger);">Tactical Asset Proximity Warning</div>
+                <div class="list-item danger" style="padding: 12px; border-radius: 8px;">
+                    <strong>Threatening National Asset: ${escapeHtml(result.proximity.nearestIndianId)}</strong><br>
+                    <div style="font-size: 0.9em; margin-top: 4px; color: var(--text-dim);">
+                        Calculated Minimum Distance: <strong style="color: white;">${result.proximity.minDistanceAfterKm.toFixed(2)} km</strong><br>
+                        Maneuver has placed the uncooperative object into a high-risk co-orbital screening envelope with our primary national resource.
+                    </div>
+                </div>
+            </div>
+        `) : ""}
+
+        <div class="section">
+            <div class="section-title">Visual Orbit Explanations</div>
+            <div class="micro-card" style="font-size: 12px; display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="width: 16px; height: 0px; border-top: 2px dashed #99b7c8;"></div>
+                    <span>Dotted Path: Predicted Reference Orbit (Pre-Maneuver Epoch)</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="width: 16px; height: 2px; background: ${result.visualization?.newOrbit?.color || "#ff8c00"};"></div>
+                    <span>Solid Path: Observed Trajectory (Post-Maneuver Fired Orbit)</span>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top: 16px; font-size: 11px; color: var(--text-dim); text-align: right; font-family: monospace;">
+            Processed Epoch: ${new Date(result.occurredAt).toLocaleString()}
+        </div>
+    `;
+}
+
+export function renderRegionalAccessAnalysis(result) {
+    if (!elements.analysisPanel || !result) return;
+    const findings = Array.isArray(result.findings) ? result.findings : [];
+    const summary = result.summary || {};
+    const debugMetrics = result.debugMetrics || {};
+
+    const findingsHtml = findings.length > 0 ? findings.map(finding => {
+        const severity = finding.operationalSeverity || "low";
+        const confidence = Number.isFinite(finding.confidenceScore) ? `${Math.round(finding.confidenceScore * 100)}%` : "Unknown";
+        const revisitChange = Number.isFinite(finding.revisitChangePercent) ? `${finding.revisitChangePercent >= 0 ? "+" : ""}${finding.revisitChangePercent.toFixed(0)}%` : "Unknown";
+
+        return `\n            <div class="list-item" style="border-left: 4px solid var(--severity-${severity}); background: rgba(255,255,255,0.02); padding: 12px; border-radius: 8px; margin-bottom: 10px;">\n                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px;">\n                    <div>\n                        <strong style="font-size: 13px; color: white;">${escapeHtml(finding.satelliteName || "Unknown satellite")}</strong>\n                        <div style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">NORAD: ${finding.noradId ?? "Unknown"}</div>\n                    </div>\n                    <div style="text-align: right; flex-shrink: 0;">\n                        <span class="badge badge-${severity}" style="padding: 2px 6px; font-size: 9px;">${escapeHtml(severity.toUpperCase())}</span><br>\n                        <span style="font-size: 10px; font-family: monospace; color: var(--text-warning); display: block; margin-top: 4px;">Conf: ${confidence}</span>\n                    </div>\n                </div>\n                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-family: monospace; font-size: 11.5px; color: var(--text-dim); margin-top: 6px;">\n                    <div>Trend: <span style="color: white;">${escapeHtml(finding.visibilityTrend?.toUpperCase() || "NONE")}</span></div>\n                    <div>Revisit Δ: <span style="color: white;">${revisitChange}</span></div>\n                    <div>Prev Passes: <span style="color: white;">${finding.previousPassCount ?? 0}</span></div>\n                    <div>Recent Passes: <span style="color: white;">${finding.recentPassCount ?? 0}</span></div>\n                    <div style="grid-column: span 2;">Avg Vis: <span style="color: white;">${Number.isFinite(finding.averageVisibilityDuration) ? finding.averageVisibilityDuration.toFixed(1) : "0.0"} min</span></div>\n                    <div style="grid-column: span 2;">First Access: <span style="color: white;">${finding.firstDetectedAccess ? new Date(finding.firstDetectedAccess).toLocaleString() : "Unknown"}</span></div>\n                </div>\n            </div>\n        `;
+    }).join("") : '<div class="hint">No uncooperative satellites showed emerging regional visibility profiles in this timeframe.</div>';
+
+    elements.analysisPanel.innerHTML = safeHtml`
+        <div class="eyebrow">Emerging Regional Access & Visibility Shifts</div>
+        <h2>Regional Presence: ${escapeHtml(result.region?.name || "Delhi Area")}</h2>
+        <p>Identifies satellites whose orbital evolution newly places them inside a strategic reconnaissance swath over our target zone.</p>
+
+        <div class="metric-grid">
+            <div class="metric-card">
+                <div class="label">Findings</div>
+                <div class="value">${summary.findingCount ?? 0}</div>
+            </div>
+            <div class="metric-card">
+                <div class="label">Unexpected Access</div>
+                <div class="value" style="color: ${summary.unexpectedRegionalPresenceCount > 0 ? 'var(--severity-warning)' : 'inherit'};">${summary.unexpectedRegionalPresenceCount ?? 0}</div>
+            </div>
+            <div class="metric-card">
+                <div class="label">Avg Confidence</div>
+                <div class="value">${Number.isFinite(summary.averageConfidenceScore) ? `${Math.round(summary.averageConfidenceScore * 100)}%` : "0%"}</div>
+            </div>
+            <div class="metric-card">
+                <div class="label">Pass Rate</div>
+                <div class="value">${Number.isFinite(debugMetrics.coveragePassRate) ? `${Math.round(debugMetrics.coveragePassRate * 100)}%` : "0%"}</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Emerging Access Intelligence Log</div>
+            <div class="list">
+                ${markSafe(findingsHtml)}
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Strategic Coverage Definition</div>
+            <div class="micro-card" style="font-size: 0.85em; line-height: 1.45; color: var(--text-dim);">
+                <strong>Revisit Delta (Revisit Δ):</strong> Shows the percentage increase or decrease in observation frequency. A negative percentage (e.g. -40%) indicates a shorter revisit time (higher risk).
+                <br><br>
+                <strong>Confidence:</strong> The probabilistic threshold that this visibility profile represents a sustained orbital realignment, rather than a transient propagation cross-over.
+            </div>
+        </div>
+    `;
 }

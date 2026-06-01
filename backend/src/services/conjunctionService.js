@@ -41,6 +41,10 @@ async function analyzeConjunctionsFromRecords(records, area, startTime, horizonM
     // 1. Initial Batch Propagation (ECI states only)
     let propagationCount = 0;
     for (const record of records) {
+        if (filters.orbitClass && record.characterisation?.orbitClass !== filters.orbitClass) {
+            continue;
+        }
+
         propagationCount++;
         if (propagationCount % 500 === 0) await new Promise(resolve => setImmediate(resolve));
 

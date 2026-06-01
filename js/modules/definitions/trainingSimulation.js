@@ -1,9 +1,10 @@
 import { appState } from "../../state.js";
-import { setStatus } from "../../ui.js";
+import { setStatus, renderAnalysisLoader } from "../../ui.js";
 import { ListenerScope } from "../../ui/panelSystem.js";
 import { eventBus, events } from "../eventBus.js";
 import * as simService from "../../simulationService.js";
-import { escapeHtml, formatDateTime, formatNumber } from "../../utils.js";
+import { escapeHtml, formatDateTime, formatNumber, safeHtml, markSafe } from "../../utils.js";
+import { elements } from "../../dom.js";
 
 const SPEED_OPTIONS = [1, 5, 10, 50, 100];
 
@@ -429,22 +430,168 @@ function buildSidebar() {
             </div>
             <button type="button" id="injectEventButton" class="secondary" ${session ? "" : "disabled"}>Inject Event</button>
         </div>
-
-        <div class="section">
-            <div class="section-title">Scenario Status Panel</div>
-            <div id="scenarioStatusPanel">${renderStatusPanel()}</div>
-        </div>
-
-        <div class="section">
-            <div class="section-title">Mission Timeline</div>
-            <div id="missionTimeline" class="list">${renderTimelineList()}</div>
-        </div>
-
-        <div class="section">
-            <div class="section-title">Active Exercise Feed</div>
-            <div id="activeExerciseFeed" class="list">${renderFeedList()}</div>
-        </div>
     `;
+}
+
+function renderSimulationDashboard() {
+    if (!elements.analysisPanel) return;
+
+    const session = getActiveSession();
+    const scenario = session ? session.scenario : getSelectedScenario();
+
+    if (!scenario) {
+        elements.analysisPanel.innerHTML = `
+            <div class="eyebrow">Sandbox Command & Control</div>
+            <h2>No Rehearsal Selected</h2>
+            <p>Please select a scenario from the catalog to load the training simulator preview.</p>
+        `;
+        return;
+    }
+
+    if (session) {
+        // Active session: Live rehearsal dashboard
+        const elapsedMinutes = (session.currentSimTime.getTime() - session.startTime.getTime()) / 60000;
+        const completion = formatProgress(elapsedMinutes, Number(scenario.durationMinutes));
+        const objectives = Array.isArray(session.objectives) ? session.objectives : [];
+        const completedObjectives = countCompletedObjectives(session);
+        const score = session.score || { triggeredEvents: 0, acknowledgedEvents: 0, onTimeResponses: 0, lateResponses: 0, averageResponseSeconds: 0 };
+        const ackRate = score.triggeredEvents ? Math.round((score.acknowledgedEvents / Math.max(1, score.triggeredEvents)) * 100) : 0;
+        
+        // Build Objectives HTML
+        const objectivesHtml = objectives.length > 0 
+            ? objectives.map(obj => `
+                <div class="list-item" style="border-left: 3px solid ${obj.status === "complete" ? "var(--text-success)" : "var(--text-dim)"}; background: rgba(255,255,255,0.01); padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px;">
+                    <div>
+                        <strong style="color: ${obj.status === "complete" ? "var(--text-bright)" : "var(--text-main)"};">${escapeHtml(obj.label)}</strong>
+                        <div style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">Target: ${escapeHtml(obj.description || "N/A")}</div>
+                    </div>
+                    <span class="badge badge-${obj.status === "complete" ? "success" : "outline"}" style="font-size: 10px;">${obj.status.toUpperCase()}</span>
+                </div>
+            `).join("")
+            : '<div class="hint">No training objectives specified for this scenario.</div>';
+
+        // Render everything
+        elements.analysisPanel.innerHTML = safeHtml`
+            <div class="eyebrow">Sandbox Command & Control</div>
+            <h2>Sandbox Rehearsal: ${escapeHtml(session.sessionName || scenario.title)}</h2>
+            <p>SDA mission training sandbox. Operation clocks, telemetry streams, and analytical engines are isolated.</p>
+
+            <div class="metric-grid" style="margin-bottom:16px;">
+                <div class="metric-card">
+                    <div class="label">Sandbox Status</div>
+                    <div class="value" style="color: var(--text-success); font-size: 18px;">Active</div>
+                </div>
+                <div class="metric-card">
+                    <div class="label">Elapsed Time</div>
+                    <div class="value" style="font-size: 18px;">${escapeHtml(formatMinutes(elapsedMinutes))}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="label">Progress</div>
+                    <div class="value" style="font-size: 18px;">${completion.toFixed(0)}%</div>
+                </div>
+                <div class="metric-card">
+                    <div class="label">Ack Rate</div>
+                    <div class="value" style="font-size: 18px; color: ${ackRate >= 75 ? 'var(--text-success)' : 'var(--text-warning)'};">${ackRate}%</div>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; margin-bottom: 16px;">
+                <div class="metric-card">
+                    <div class="label">Triggered Events</div>
+                    <div class="value" style="font-size: 16px;">${score.triggeredEvents || 0}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="label">Acknowledged</div>
+                    <div class="value" style="font-size: 16px;">${score.acknowledgedEvents || 0}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="label">On-Time / Late</div>
+                    <div class="value" style="font-size: 16px;">${score.onTimeResponses || 0} / ${score.lateResponses || 0}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="label">Avg Response Time</div>
+                    <div class="value" style="font-size: 16px;">${score.averageResponseSeconds ? `${formatNumber(score.averageResponseSeconds, 0)}s` : "N/A"}</div>
+                </div>
+            </div>
+
+            <div class="section" style="margin-top: 20px;">
+                <div class="section-title">Training Objectives Checklist (${completedObjectives}/${objectives.length})</div>
+                <div class="list" style="display: flex; flex-direction: column;">
+                    ${markSafe(objectivesHtml)}
+                </div>
+            </div>
+
+            <div class="section" style="margin-top: 20px;">
+                <div class="section-title">Active Exercise Alerts (Requires Acknowledgment)</div>
+                <div class="list">
+                    ${markSafe(renderFeedList())}
+                </div>
+            </div>
+
+            <div class="section" style="margin-top: 20px;">
+                <div class="section-title">Operator Actions & Simulation Timeline</div>
+                <div class="list">
+                    ${markSafe(renderTimelineList())}
+                </div>
+            </div>
+        `;
+    } else {
+        // Previewing scenario
+        const objectives = Array.isArray(scenario.objectives) ? scenario.objectives : [];
+        const assets = Array.isArray(scenario.participatingAssets) ? scenario.participatingAssets : [];
+        const planCount = Array.isArray(scenario.timeline) ? scenario.timeline.length : 0;
+
+        elements.analysisPanel.innerHTML = safeHtml`
+            <div class="eyebrow">Sandbox Command & Control</div>
+            <h2>Rehearsal Preview: ${escapeHtml(scenario.title)}</h2>
+            <p>Load this training scenario from the sidebar to start a simulated exercise.</p>
+
+            <div class="metric-grid" style="margin-bottom:16px;">
+                <div class="metric-card">
+                    <div class="label">Difficulty</div>
+                    <div class="value" style="font-size: 18px; color: var(--text-warning);">${escapeHtml(scenario.difficulty)}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="label">Category</div>
+                    <div class="value" style="font-size: 18px;">${escapeHtml(scenario.category)}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="label">Duration</div>
+                    <div class="value" style="font-size: 18px;">${scenario.durationMinutes} min</div>
+                </div>
+                <div class="metric-card">
+                    <div class="label">Timeline Events</div>
+                    <div class="value" style="font-size: 18px;">${planCount}</div>
+                </div>
+            </div>
+
+            <div class="section" style="margin-top: 20px;">
+                <div class="section-title">Scenario Description</div>
+                <div class="micro-card" style="font-size: 13.5px; line-height: 1.5;">
+                    ${escapeHtml(scenario.description)}
+                </div>
+            </div>
+
+            <div class="section" style="margin-top: 20px;">
+                <div class="section-title">Participating Assets</div>
+                <div class="micro-card" style="font-family: monospace; font-size: 12.5px;">
+                    ${escapeHtml(assets.join(", ") || "None")}
+                </div>
+            </div>
+
+            <div class="section" style="margin-top: 20px;">
+                <div class="section-title">Scenario Objectives Checklist</div>
+                <div class="list" style="display: flex; flex-direction: column;">
+                    ${markSafe(objectives.map(obj => `
+                        <div class="list-item" style="border-left: 3px solid var(--text-dim); background: rgba(255,255,255,0.01); padding: 8px 12px; margin-bottom: 6px;">
+                            <strong>${escapeHtml(obj.label)}</strong>
+                            <div style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">Target: ${escapeHtml(obj.description || "N/A")}</div>
+                        </div>
+                    `).join(""))}
+                </div>
+            </div>
+        `;
+    }
 }
 
 function updateClockReadouts() {
@@ -453,9 +600,6 @@ function updateClockReadouts() {
     const elapsed = document.getElementById("simElapsedValue");
     const speed = document.getElementById("simSpeedValue");
     const ack = document.getElementById("simAckValue");
-    const statusPanel = document.getElementById("scenarioStatusPanel");
-    const timeline = document.getElementById("missionTimeline");
-    const feed = document.getElementById("activeExerciseFeed");
     const pauseBtn = document.getElementById("pauseResumeButton");
     const startBtn = document.getElementById("startExerciseButton");
     const replayBtn = document.getElementById("replayScenarioButton");
@@ -490,9 +634,8 @@ function updateClockReadouts() {
     if (exitBtn) {
         exitBtn.disabled = !session;
     }
-    if (statusPanel && session) {
-        statusPanel.innerHTML = renderStatusPanel();
-    }
+
+    renderSimulationDashboard();
 }
 
 function renderSidebar() {
@@ -513,6 +656,8 @@ function renderSidebar() {
         }
 
         setStatus(`Loading sandbox scenario: ${scenario.title}`);
+        renderAnalysisLoader("Sandbox Rehearsal Reconfiguration", "Setting up isolated practice sandbox, loading scenario objectives, and preparing synthetic orbits...");
+        
         try {
             await simService.startSimulation(scenario.id, scenario.title);
             setStatus(`Sandbox loaded: ${scenario.title}. The live catalog is frozen.`);
@@ -618,16 +763,6 @@ function renderSidebar() {
         setStatus(`Simulation speed set to ${speed}x.`);
     });
 
-    sidebarScope.addMany("[data-ack-event]", "click", async (event) => {
-        const feedId = event.currentTarget.dataset.ackEvent;
-        if (!feedId) {
-            return;
-        }
-
-        await simService.acknowledgeSimulationEvent(feedId);
-        setStatus("Operator acknowledgement recorded.");
-    });
-
     updateClockReadouts();
 }
 
@@ -710,6 +845,7 @@ export default {
 
         busScope.dispose();
         busScope = new ListenerScope();
+        
         busScope.addCleanup(eventBus.on(events.SIMULATION_STARTED, () => {
             renderSidebar();
             setStatus("Training sandbox activated.");
@@ -726,6 +862,29 @@ export default {
         busScope.addCleanup(eventBus.on(events.SIMULATION_STOPPED, () => {
             renderSidebar();
         }));
+
+        // Event delegation for right panel ack buttons and details loading
+        if (elements.analysisPanel) {
+            busScope.add(elements.analysisPanel, "click", async (event) => {
+                const ackBtn = event.target.closest("[data-ack-event]");
+                if (ackBtn) {
+                    const feedId = ackBtn.dataset.ackEvent;
+                    try {
+                        ackBtn.disabled = true;
+                        ackBtn.textContent = "Acknowledging...";
+                        await simService.acknowledgeSimulationEvent(feedId);
+                        setStatus("Operator acknowledgement recorded.");
+                        renderSimulationDashboard();
+                    } catch (error) {
+                        console.error("Failed to acknowledge simulation event:", error);
+                        setStatus("Failed to acknowledge simulation event.");
+                        ackBtn.disabled = false;
+                        ackBtn.textContent = "Acknowledge";
+                    }
+                    return;
+                }
+            });
+        }
 
         if (tickHandle) {
             clearInterval(tickHandle);
@@ -751,6 +910,11 @@ export default {
                 simService.stopSimulation().catch((error) => {
                     console.warn("Failed to stop training sandbox cleanly:", error);
                 });
+                
+                // Clear the right panel simulation dashboard on unmount
+                if (elements.analysisPanel) {
+                    elements.analysisPanel.innerHTML = "";
+                }
             }
         };
     }
