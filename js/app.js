@@ -60,6 +60,7 @@ import { eventBus, events } from "./modules/eventBus.js";
 import { moduleHost } from "./modules/moduleHost.js";
 import { moduleDock } from "./modules/moduleDock.js";
 import { registerAllModules } from "./modules/registerAllModules.js";
+import { buildModuleHelpContent } from "./modules/moduleHelp.js";
 import {
     appendTracePoint,
     clearSelection,
@@ -354,6 +355,11 @@ async function initializeApplication() {
         appState.satellites = satellites;
         appState.catalogApiBaseUrl = apiBaseUrl;
         appState.catalogLoaded = true;
+
+        if (catalogStatusSnapshot) {
+            renderCatalogStatus(catalogStatusSnapshot, catalogHistorySnapshot);
+        }
+
         eventBus.emit(events.catalogReady);
 
         setStatus(`Loaded ${satellites.length} satellites`);
@@ -546,6 +552,42 @@ async function initializeApplication() {
             elements.globeRotationToggle.addEventListener("click", () => {
                 toggleGlobeRotation();
             });
+        }
+
+        if (elements.moduleHelpToggle) {
+            elements.moduleHelpToggle.addEventListener("click", () => {
+                const activeDefinition = moduleHost.getActiveModuleDefinition();
+                if (activeDefinition) {
+                    if (elements.moduleHelpTitle) {
+                        elements.moduleHelpTitle.textContent = `${activeDefinition.label} Guide`;
+                    }
+                    if (elements.moduleHelpBody) {
+                        elements.moduleHelpBody.innerHTML = buildModuleHelpContent(activeDefinition);
+                    }
+                } else {
+                    if (elements.moduleHelpTitle) {
+                        elements.moduleHelpTitle.textContent = "How to use this module";
+                    }
+                    if (elements.moduleHelpBody) {
+                        elements.moduleHelpBody.innerHTML = `<div class="hint">Please select a module from the bottom dock first.</div>`;
+                    }
+                }
+                if (elements.moduleHelpPanel) elements.moduleHelpPanel.classList.add("is-open");
+                if (elements.moduleHelpBackdrop) elements.moduleHelpBackdrop.classList.add("is-open");
+            });
+        }
+
+        const closeHelp = () => {
+            if (elements.moduleHelpPanel) elements.moduleHelpPanel.classList.remove("is-open");
+            if (elements.moduleHelpBackdrop) elements.moduleHelpBackdrop.classList.remove("is-open");
+        };
+
+        if (elements.moduleHelpClose) {
+            elements.moduleHelpClose.addEventListener("click", closeHelp);
+        }
+
+        if (elements.moduleHelpBackdrop) {
+            elements.moduleHelpBackdrop.addEventListener("click", closeHelp);
         }
 
         // Cesium ScreenSpaceEventHandler for interaction

@@ -7,6 +7,7 @@ import {
     computeBounds,
     escapeHtml,
     isCommercialSatelliteName,
+    isThreatSatellite,
     safeHtml,
     formatDateTime,
     formatLatitude,

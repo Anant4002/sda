@@ -3,6 +3,7 @@ import { renderCatalogStatus, renderSatelliteDirectory, setStatus } from "../../
 import { ListenerScope } from "../../ui/panelSystem.js";
 import { eventBus, events } from "../eventBus.js";
 import { formatNumber, isThreatSatellite } from "../../utils.js";
+import { fetchJsonWithFallback, postJsonWithFallback } from "../../apiService.js";
 
 function buildSidebar() {
     return `
@@ -39,7 +40,7 @@ function buildSidebar() {
                 <button id="viewNewSatellitesBtn" class="primary" style="width: 100%; margin-top: 8px; font-size: 11px; padding: 6px; text-transform: uppercase; font-weight: bold; letter-spacing: 0.05em;">View New Satellites</button>
             </div>
         </div>
-
+ 
         <!-- 2. Search -->
         <div class="section" id="opSearchSection">
             <div class="section-title">Search</div>
@@ -64,6 +65,10 @@ function buildSidebar() {
                 <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--text-main); font-weight:normal; text-transform:none; font-size:13px;">
                     <input id="newSatellitesDetectedToggle" type="checkbox">
                     Newly Detected Objects
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--text-main); font-weight:normal; text-transform:none; font-size:13px;">
+                    <input id="hideCommercialToggle" type="checkbox">
+                    Hide Commercial Satellites
                 </label>
             </div>
 
@@ -114,9 +119,9 @@ function buildSidebar() {
             <div id="indianSummary" class="micro-card" style="font-size: 11px; color: var(--text-dim); margin-bottom: 6px;">Loading catalog...</div>
             <div id="indianSatList" class="sat-list" style="display: flex; flex-direction: column; gap: 6px;"></div>
             <div class="pagination catalog-pagination" style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding: 4px 0;">
-                <button id="prevCatalogPageBtn" class="btn-sm secondary badge-outline" style="font-size: 11px; padding: 3px 8px; background: none; border: 1px solid rgba(111,226,255,0.3); color: var(--text-main); cursor: pointer; border-radius: 4px;">Previous</button>
+                <button id="prevCatalogPageBtn" class="btn-sm secondary badge-outline" style="font-size: 11px; padding: 3px 8px; background: none; border: 1px solid rgba(111,226,255,0.3); color: var(--text-main); cursor: pointer; border-radius: 4px;">&lt;</button>
                 <span id="catalogPageInfo" style="font-size: 11px; color: var(--text-dim);">Page 1 of 1</span>
-                <button id="nextCatalogPageBtn" class="btn-sm secondary badge-outline" style="font-size: 11px; padding: 3px 8px; background: none; border: 1px solid rgba(111,226,255,0.3); color: var(--text-main); cursor: pointer; border-radius: 4px;">Next</button>
+                <button id="nextCatalogPageBtn" class="btn-sm secondary badge-outline" style="font-size: 11px; padding: 3px 8px; background: none; border: 1px solid rgba(111,226,255,0.3); color: var(--text-main); cursor: pointer; border-radius: 4px;">&gt;</button>
             </div>
         </div>
 
@@ -233,6 +238,7 @@ export default {
         const newSatellitesDetectedToggle = document.getElementById("newSatellitesDetectedToggle");
         const showOnlyIndianToggle = document.getElementById("showOnlyIndianToggle");
         const showOnlyThreatsToggle = document.getElementById("showOnlyThreatsToggle");
+        const hideCommercialToggle = document.getElementById("hideCommercialToggle");
         const orbitLEOCheckbox = document.getElementById("orbitLEOCheckbox");
         const orbitMEOCheckbox = document.getElementById("orbitMEOCheckbox");
         const orbitGEOCheckbox = document.getElementById("orbitGEOCheckbox");
@@ -244,6 +250,7 @@ export default {
         if (newSatellitesDetectedToggle) newSatellitesDetectedToggle.checked = appState.showOnlyNewSyncSatellites;
         if (showOnlyIndianToggle) showOnlyIndianToggle.checked = appState.showOnlyIndian;
         if (showOnlyThreatsToggle) showOnlyThreatsToggle.checked = appState.showOnlyThreats;
+        if (hideCommercialToggle) hideCommercialToggle.checked = appState.hideCommercialSatellites;
         if (orbitLEOCheckbox) orbitLEOCheckbox.checked = appState.orbitClassFilter.LEO;
         if (orbitMEOCheckbox) orbitMEOCheckbox.checked = appState.orbitClassFilter.MEO;
         if (orbitGEOCheckbox) orbitGEOCheckbox.checked = appState.orbitClassFilter.GEO;
@@ -262,7 +269,7 @@ export default {
             if (checked && (!appState.latestNewSatelliteNames || appState.latestNewSatelliteNames.size === 0)) {
                 setStatus("Retrieving newly discovered satellites...");
                 try {
-                    const { payload } = await ctx.shared.fetchJsonWithFallback("/api/catalog/latest-new-satellites", appState.catalogApiBaseUrl);
+                    const { payload } = await fetchJsonWithFallback("/api/catalog/latest-new-satellites", appState.catalogApiBaseUrl);
                     const sats = payload.satellites || [];
                     appState.latestNewSatelliteNames = new Set(sats.map(s => s.name));
                     setStatus(`Loaded ${sats.length} new satellites from the latest sync.`);
@@ -289,7 +296,7 @@ export default {
 
                 setStatus("Retrieving newly discovered satellites...");
                 try {
-                    const { payload } = await ctx.shared.fetchJsonWithFallback("/api/catalog/latest-new-satellites", appState.catalogApiBaseUrl);
+                    const { payload } = await fetchJsonWithFallback("/api/catalog/latest-new-satellites", appState.catalogApiBaseUrl);
                     const sats = payload.satellites || [];
                     appState.latestNewSatelliteNames = new Set(sats.map(s => s.name));
                     setStatus(`Viewing ${sats.length} new satellites from the latest sync.`);
@@ -318,6 +325,13 @@ export default {
             appState.catalogPage = 1;
             triggerVisibilityUpdate();
             setStatus(appState.showOnlyThreats ? "Filtering: Threat objects only." : "Restored international objects.");
+        });
+
+        scope.add(hideCommercialToggle, "change", () => {
+            appState.hideCommercialSatellites = Boolean(hideCommercialToggle.checked);
+            appState.catalogPage = 1;
+            triggerVisibilityUpdate();
+            setStatus(appState.hideCommercialSatellites ? "Filtering: Hiding commercial satellites." : "Restored commercial satellites.");
         });
 
         const updateOrbitClassFilters = () => {
@@ -400,7 +414,7 @@ export default {
                 btn.disabled = true;
                 btn.textContent = "Syncing...";
                 setStatus("Triggering manual catalog sync...");
-                const { payload } = await ctx.shared.postJsonWithFallback("/api/sync", {}, appState.catalogApiBaseUrl);
+                const { payload } = await postJsonWithFallback("/api/sync", {}, appState.catalogApiBaseUrl);
                 setStatus(`Sync complete: ${payload.syncedCount} records.`);
                 await refreshStatus();
             } catch (error) {
