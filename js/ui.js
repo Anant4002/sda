@@ -1513,7 +1513,7 @@ export function renderSatelliteDirectory(toggleSatellitePath, hideGroup, clearHi
                         ${escapeHtml(group.label)}
                         <div class="badge-row" style="margin-top: 4px;">
                             ${char.orbitClass ? `<span class="badge badge-outline">${escapeHtml(char.orbitClass)}</span>` : ""}
-                            ${char.objectType ? `<span class="badge badge-outline">${escapeHtml(char.objectType)}</span>` : ""}
+                            ${char.objectType && char.objectType.toUpperCase() !== "PAYLOAD" ? `<span class="badge badge-outline">${escapeHtml(char.objectType)}</span>` : ""}
                             ${char.operationalStatus ? `<span class="badge ${char.operationalStatus === "Active" ? "badge-success" : "badge-warning"}">${escapeHtml(char.operationalStatus)}</span>` : ""}
                         </div>
                         <small style="display: block; margin-top: 2px;">${group.count} satellite${group.count === 1 ? "" : "s"}${group.indianCount ? ` | ${group.indianCount} Indian` : ""} | click for orbit preview</small>

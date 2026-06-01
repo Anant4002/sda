@@ -245,56 +245,6 @@ export function getModuleHelpGuide(definition) {
 }
 
 export function buildModuleHelpContent(definition) {
-    if (definition && definition.id === "mission-control") {
-        const activeCount = appState.satellites ? appState.satellites.length : 15510;
-        const indianCount = appState.satellites ? appState.satellites.filter(s => s.isIndian).length : 49;
-
-        let ageSec = 5;
-        if (appState.catalogStatusSnapshot && appState.catalogStatusSnapshot.status) {
-            ageSec = appState.catalogStatusSnapshot.status.dataAgeSeconds ?? 5;
-        }
-
-        let freshnessText = `${ageSec} seconds`;
-        if (ageSec >= 60) {
-            const min = Math.floor(ageSec / 60);
-            freshnessText = `${min} minute${min === 1 ? "" : "s"}`;
-        }
-
-        return `
-            <div class="help-guide" style="font-family: var(--font-mono); color: var(--text-main); font-size: 13px; line-height: 1.5;">
-                <div class="help-section">
-                    <div class="help-section-title" style="font-size: 1.1em; color: var(--text-bright); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px; margin-bottom: 10px;">Mission Control</div>
-                    <ul class="help-list" style="list-style-type: square; padding-left: 18px; display: flex; flex-direction: column; gap: 4px;">
-                        <li>Catalog Health Monitoring</li>
-                        <li>Satellite Search & Filtering</li>
-                        <li>Orbit Preview</li>
-                        <li>Catalog Synchronization</li>
-                    </ul>
-                </div>
-
-                <div class="help-section" style="margin-top: 20px;">
-                    <div class="help-section-title" style="font-size: 1em; color: var(--text-bright); margin-bottom: 8px;">Current Catalog:</div>
-                    <div class="micro-card" style="padding: 12px; background: rgba(0,0,0,0.25); border: 1px solid var(--panel-border); border-radius: 6px;">
-                        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                                <td style="padding: 4px 0; color: var(--text-dim);">Active Objects:</td>
-                                <td style="padding: 4px 0; text-align: right; font-weight: bold; color: white;">${formatNumber(activeCount, 0)}</td>
-                            </tr>
-                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                                <td style="padding: 4px 0; color: var(--text-dim);">Indian Assets:</td>
-                                <td style="padding: 4px 0; text-align: right; font-weight: bold; color: var(--indian);">${indianCount}</td>
-                            </tr>
-                            <tr>
-                                <td style="padding: 4px 0; color: var(--text-dim);">Freshness:</td>
-                                <td style="padding: 4px 0; text-align: right; font-weight: bold; color: var(--success);">${freshnessText}</td>
-                            </tr>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
     const guide = getModuleHelpGuide(definition);
 
     const stepItems = guide.steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("");
