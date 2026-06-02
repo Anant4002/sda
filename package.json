@@ -1,8 +1,16 @@
 {
+  "name": "sda-platform",
+  "version": "1.0.0",
+  "description": "Space Domain Awareness command-and-control platform",
+  "author": "Sapidblue Technologies",
+  "license": "UNLICENSED",
+  "private": true,
   "scripts": {
     "start": "node backend/server.js",
     "check": "node --check backend/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "lint": "eslint .",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "axios": "^1.16.0",
@@ -13,5 +21,9 @@
     "pg-hstore": "^2.3.4",
     "satellite.js": "^4.0.0",
     "sequelize": "^6.37.8"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.5"
   }
 }
