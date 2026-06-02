@@ -55,13 +55,16 @@ function createApp() {
     app.use(validateJsonBody);
     app.use(express.json({ limit: "64kb" }));
 
-    // Serve static files from the project root (HTML, JS, data)
+    // Security Hardening: Only serve the public and shared folders statically
     const projectRoot = path.resolve(__dirname, "..", "..");
-    app.use(express.static(projectRoot));
+    const publicPath = path.join(projectRoot, "public");
+    
+    app.use(express.static(publicPath));
+    app.use("/shared", express.static(path.join(projectRoot, "shared")));
 
     // Serve the main HTML file as the root
     app.get("/", (req, res) => {
-        res.sendFile(path.join(projectRoot, "simulation.html"));
+        res.sendFile(path.join(publicPath, "simulation.html"));
     });
 
     // API routes
