@@ -793,7 +793,6 @@ export function drawUctMarkers(ucts) {
 }
 
 export function enterFocusedAnalysisMode(satelliteId) {
-    console.log(`[FocusMode] Entering focus mode for: ${satelliteId}`);
 
     if (viewer.scene.mode !== Cesium.SceneMode.SCENE3D) {
         viewer.scene.mode = Cesium.SceneMode.SCENE3D;
@@ -836,13 +835,11 @@ export function enterFocusedAnalysisMode(satelliteId) {
 }
 
 export function exitFocusedAnalysisMode() {
-    console.log("[FocusMode] Exiting focus mode. Restoring catalog visibility.");
     appState.isFocusMode = false;
     appState.focusedSatelliteId = null;
 
     const driftCount = appState.driftEntities ? appState.driftEntities.length : 0;
     clearDriftTracks();
-    console.log(`[FocusMode] Cleaned up ${driftCount} drift tracks.`);
 
     // 1. Restore satellite points visibility
     let restoredPoints = 0;
@@ -863,7 +860,6 @@ export function exitFocusedAnalysisMode() {
             if (point.show) restoredPoints++;
         }
     }
-    console.log(`[FocusMode] Restored ${restoredPoints} catalog points.`);
 
     // 2. Restore other entities visibility
     let restoredEntities = 0;
@@ -874,7 +870,6 @@ export function exitFocusedAnalysisMode() {
             if (saved) restoredEntities++;
         }
     });
-    console.log(`[FocusMode] Restored ${restoredEntities} scene entities.`);
 
     appState.savedVisibilityState.clear();
     setStatus("Exited Focused Analysis Mode. Full catalog restored.");

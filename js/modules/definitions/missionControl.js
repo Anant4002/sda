@@ -40,7 +40,7 @@ function buildSidebar() {
                 <button id="viewNewSatellitesBtn" class="primary" style="width: 100%; margin-top: 8px; font-size: 11px; padding: 6px; text-transform: uppercase; font-weight: bold; letter-spacing: 0.05em;">View New Satellites</button>
             </div>
         </div>
- 
+
         <!-- 2. Search -->
         <div class="section" id="opSearchSection">
             <div class="section-title">Search</div>
@@ -56,15 +56,15 @@ function buildSidebar() {
             <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;">
                 <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--text-main); font-weight:normal; text-transform:none; font-size:13px;">
                     <input id="showOnlyIndianToggle" type="checkbox">
-                    Only Indian Satellites
+                    Show Only Indian Satellites
                 </label>
                 <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--text-main); font-weight:normal; text-transform:none; font-size:13px;">
                     <input id="showOnlyThreatsToggle" type="checkbox">
-                    Only Threat Objects
+                    Show Only Threat Objects
                 </label>
                 <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--text-main); font-weight:normal; text-transform:none; font-size:13px;">
                     <input id="newSatellitesDetectedToggle" type="checkbox">
-                    Newly Detected Objects
+                    Show Newly Detected Objects
                 </label>
                 <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--text-main); font-weight:normal; text-transform:none; font-size:13px;">
                     <input id="hideCommercialToggle" type="checkbox">
@@ -108,9 +108,7 @@ function buildSidebar() {
                     <span class="badge badge-outline" id="priorityCountCommercial">--</span>
                 </div>
             </div>
-            <div style="text-align: right; margin-top: 4px;">
-                <a href="#" id="viewFullCatalogLink" style="font-size: 12px; color: var(--accent); text-decoration: none; font-weight: bold; display: inline-block;">View Full Catalog →</a>
-            </div>
+
         </div>
 
         <!-- 5. Full Catalog Browser -->
@@ -122,6 +120,11 @@ function buildSidebar() {
                 <button id="prevCatalogPageBtn" class="btn-sm secondary badge-outline" style="font-size: 11px; padding: 3px 8px; background: none; border: 1px solid rgba(111,226,255,0.3); color: var(--text-main); cursor: pointer; border-radius: 4px;">&lt;</button>
                 <span id="catalogPageInfo" style="font-size: 11px; color: var(--text-dim);">Page 1 of 1</span>
                 <button id="nextCatalogPageBtn" class="btn-sm secondary badge-outline" style="font-size: 11px; padding: 3px 8px; background: none; border: 1px solid rgba(111,226,255,0.3); color: var(--text-main); cursor: pointer; border-radius: 4px;">&gt;</button>
+            </div>
+            <!-- Hidden Satellites Controls -->
+            <div id="hiddenGroupsContainer" style="margin-top: 12px; padding: 8px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--panel-border); border-radius: 4px;">
+                <div id="hiddenGroupsSummary" style="font-size: 11px; color: var(--text-dim); margin-bottom: 8px; line-height: 1.4; word-wrap: break-word;">No satellite name groups are hidden.</div>
+                <button id="resetHiddenGroupsButton" class="secondary" style="width: 100%; font-size: 11px; padding: 6px; text-transform: uppercase; font-weight: bold; letter-spacing: 0.05em;" disabled>Show All Hidden Satellites</button>
             </div>
         </div>
 
@@ -392,19 +395,7 @@ export default {
             });
         });
 
-        const viewFullCatalogLink = document.getElementById("viewFullCatalogLink");
-        if (viewFullCatalogLink) {
-            scope.add(viewFullCatalogLink, "click", (e) => {
-                e.preventDefault();
-                appState.activePriorityGroup = null;
-                priorityCards.forEach(c => {
-                    c.style.border = "";
-                    c.style.background = "";
-                });
-                appState.catalogPage = 1;
-                triggerVisibilityUpdate();
-            });
-        }
+
 
         scope.add(document.getElementById("refreshCatalogStatusBtn"), "click", refreshStatus);
 

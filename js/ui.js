@@ -1473,8 +1473,11 @@ export function renderSatelliteDirectory(toggleSatellitePath, hideGroup, clearHi
     const groups = buildSatelliteGroups(satellites);
     const query = normalizeSearchValue(elements.satelliteSearchInput.value);
 
-    // Support Name or NORAD ID in search matching
+    // Support Name or NORAD ID in search matching, and filter out hidden groups
     const filteredGroups = groups.filter((group) => {
+        if (appState.hiddenGroupLabels.has(group.label)) {
+            return false;
+        }
         if (!query) return true;
         if (group.label.includes(query)) return true;
         return group.satellites.some(s => {

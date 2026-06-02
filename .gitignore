@@ -4,3 +4,6 @@ dist/
 build/
 coverage/
 *.log
+.idea/
+reports/
+project_knowledge_report.md
