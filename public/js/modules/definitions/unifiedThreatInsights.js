@@ -50,9 +50,9 @@ function renderButtonRow(filterGroup, options, activeValue) {
             ${options.map((option) => button(option.label, {
                 variant: option.value === activeValue ? "primary" : "secondary",
                 dataset: {
-                    utiAction: "set-filter",
-                    filterGroup,
-                    filterValue: option.value
+                    "uti-action": "set-filter",
+                    "filter-group": filterGroup,
+                    "filter-value": option.value
                 }
             })).join("")}
         </div>
@@ -87,13 +87,13 @@ function renderSidebar() {
             <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top: 12px;">
                 ${button(viewToggleLabel, {
                     dataset: {
-                        utiAction: "toggle-view-mode"
+                        "uti-action": "toggle-view-mode"
                     }
                 })}
                 ${button("Refresh Queue", {
                     variant: "secondary",
                     dataset: {
-                        utiAction: "refresh-queue"
+                        "uti-action": "refresh-queue"
                     }
                 })}
             </div>
@@ -127,7 +127,7 @@ async function refreshInsights(ctx, patch = {}) {
             summary.textContent = "Refreshing threat queue...";
         }
         renderAnalysisLoader("Unified Threat Insights", "Building the operational threat queue...");
-        const response = await ctx.shared.refreshUnifiedThreatInsights({
+        const response = await fetchUnifiedThreatInsights({
             classification: state.classification,
             priority: state.priority,
             page: state.page,

@@ -572,14 +572,30 @@ async function initializeApplication() {
                         elements.moduleHelpBody.innerHTML = `<div class="hint">Please select a module from the bottom dock first.</div>`;
                     }
                 }
-                if (elements.moduleHelpPanel) elements.moduleHelpPanel.classList.add("is-open");
-                if (elements.moduleHelpBackdrop) elements.moduleHelpBackdrop.classList.add("is-open");
+                if (elements.moduleHelpPanel) {
+                    elements.moduleHelpPanel.classList.add("is-open");
+                    elements.moduleHelpPanel.setAttribute("aria-hidden", "false");
+                }
+                if (elements.moduleHelpBackdrop) {
+                    elements.moduleHelpBackdrop.classList.add("is-open");
+                    elements.moduleHelpBackdrop.setAttribute("aria-hidden", "false");
+                }
+                elements.moduleHelpToggle.setAttribute("aria-expanded", "true");
             });
         }
 
         const closeHelp = () => {
-            if (elements.moduleHelpPanel) elements.moduleHelpPanel.classList.remove("is-open");
-            if (elements.moduleHelpBackdrop) elements.moduleHelpBackdrop.classList.remove("is-open");
+            if (elements.moduleHelpPanel) {
+                elements.moduleHelpPanel.classList.remove("is-open");
+                elements.moduleHelpPanel.setAttribute("aria-hidden", "true");
+            }
+            if (elements.moduleHelpBackdrop) {
+                elements.moduleHelpBackdrop.classList.remove("is-open");
+                elements.moduleHelpBackdrop.setAttribute("aria-hidden", "true");
+            }
+            if (elements.moduleHelpToggle) {
+                elements.moduleHelpToggle.setAttribute("aria-expanded", "false");
+            }
         };
 
         if (elements.moduleHelpClose) {

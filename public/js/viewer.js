@@ -784,8 +784,7 @@ export function drawUctMarkers(ucts) {
                 outline: true,
                 outlineColor: Cesium.Color.RED,
                 outlineWidth: 2,
-                height: 0,
-                classificationType: Cesium.ClassificationType.TERRAIN
+                height: 0
             }
         });
         appState.uctEntities.push(entity);
