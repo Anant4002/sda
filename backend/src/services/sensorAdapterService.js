@@ -30,7 +30,9 @@ const SENSOR_REGISTRY = [
         trackingAccuracyKm: 0.5,
         updateRateSeconds: 30,
         operationalStatus: 'ACTIVE',
-        isRepresentative: true
+        isRepresentative: true,
+        dataSource: 'REPRESENTATIVE',
+        disclaimer: 'Parameters are representative estimates. Not connected to a live sensor feed.'
     },
     {
         id: 'S-RAD-BLURU',
@@ -43,7 +45,9 @@ const SENSOR_REGISTRY = [
         trackingAccuracyKm: 0.8,
         updateRateSeconds: 15,
         operationalStatus: 'ACTIVE',
-        isRepresentative: true
+        isRepresentative: true,
+        dataSource: 'REPRESENTATIVE',
+        disclaimer: 'Parameters are representative estimates. Not connected to a live sensor feed.'
     },
     {
         id: 'S-RF-GUW',
@@ -56,7 +60,9 @@ const SENSOR_REGISTRY = [
         trackingAccuracyKm: 0.6,
         updateRateSeconds: 20,
         operationalStatus: 'ACTIVE',
-        isRepresentative: true
+        isRepresentative: true,
+        dataSource: 'REPRESENTATIVE',
+        disclaimer: 'Parameters are representative estimates. Not connected to a live sensor feed.'
     },
     {
         id: 'S-OPT-TERLS',
@@ -69,7 +75,9 @@ const SENSOR_REGISTRY = [
         trackingAccuracyKm: 0.4,
         updateRateSeconds: 30,
         operationalStatus: 'ACTIVE',
-        isRepresentative: true
+        isRepresentative: true,
+        dataSource: 'REPRESENTATIVE',
+        disclaimer: 'Parameters are representative estimates. Not connected to a live sensor feed.'
     },
     {
         id: 'S-RAD-SHAR',
@@ -82,7 +90,9 @@ const SENSOR_REGISTRY = [
         trackingAccuracyKm: 0.3,
         updateRateSeconds: 10,
         operationalStatus: 'ACTIVE',
-        isRepresentative: true
+        isRepresentative: true,
+        dataSource: 'REPRESENTATIVE',
+        disclaimer: 'Parameters are representative estimates. Not connected to a live sensor feed.'
     },
     {
         id: 'S-RAD-PORTBLAIR',
@@ -95,7 +105,9 @@ const SENSOR_REGISTRY = [
         trackingAccuracyKm: 1.0,
         updateRateSeconds: 20,
         operationalStatus: 'ACTIVE',
-        isRepresentative: true
+        isRepresentative: true,
+        dataSource: 'REPRESENTATIVE',
+        disclaimer: 'Parameters are representative estimates. Not connected to a live sensor feed.'
     },
     {
         id: 'S-RAD-DELHI',
@@ -108,7 +120,9 @@ const SENSOR_REGISTRY = [
         trackingAccuracyKm: 1.2,
         updateRateSeconds: 15,
         operationalStatus: 'ACTIVE',
-        isRepresentative: true
+        isRepresentative: true,
+        dataSource: 'REPRESENTATIVE',
+        disclaimer: 'Parameters are representative estimates. Not connected to a live sensor feed.'
     },
     {
         id: 'S-RAD-JODHPUR',
@@ -121,7 +135,9 @@ const SENSOR_REGISTRY = [
         trackingAccuracyKm: 1.0,
         updateRateSeconds: 15,
         operationalStatus: 'ACTIVE',
-        isRepresentative: true
+        isRepresentative: true,
+        dataSource: 'REPRESENTATIVE',
+        disclaimer: 'Parameters are representative estimates. Not connected to a live sensor feed.'
     },
     {
         id: 'S-OPT-CHENNAI',
@@ -134,7 +150,9 @@ const SENSOR_REGISTRY = [
         trackingAccuracyKm: 0.4,
         updateRateSeconds: 30,
         operationalStatus: 'ACTIVE',
-        isRepresentative: true
+        isRepresentative: true,
+        dataSource: 'REPRESENTATIVE',
+        disclaimer: 'Parameters are representative estimates. Not connected to a live sensor feed.'
     },
     {
         id: 'S-MM-HYD',
@@ -147,7 +165,9 @@ const SENSOR_REGISTRY = [
         trackingAccuracyKm: 0.5,
         updateRateSeconds: 10,
         operationalStatus: 'ACTIVE',
-        isRepresentative: true
+        isRepresentative: true,
+        dataSource: 'REPRESENTATIVE',
+        disclaimer: 'Parameters are representative estimates. Not connected to a live sensor feed.'
     }
 ];
 
@@ -302,5 +322,6 @@ module.exports = {
     normalizeSensorTrack,
     registerSensor,
     getSensor,
+    getSensorRegistry: () => SENSOR_REGISTRY,
     validateTrack
 };

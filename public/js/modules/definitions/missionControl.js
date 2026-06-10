@@ -275,7 +275,18 @@ export default {
                     const { payload } = await fetchJsonWithFallback("/api/catalog/latest-new-satellites", appState.catalogApiBaseUrl);
                     const sats = payload.satellites || [];
                     appState.latestNewSatelliteNames = new Set(sats.map(s => s.name));
-                    setStatus(`Loaded ${sats.length} new satellites from the latest sync.`);
+
+                    // Inject any new satellites that are not yet in the scene
+                    if (typeof ctx.shared.addNewSatellitesToScene === "function" && sats.length > 0) {
+                        const added = await ctx.shared.addNewSatellitesToScene(sats);
+                        if (added > 0) {
+                            setStatus(`Loaded ${sats.length} new satellites (${added} added to globe).`);
+                        } else {
+                            setStatus(`Loaded ${sats.length} new satellites from the latest sync.`);
+                        }
+                    } else {
+                        setStatus(`Loaded ${sats.length} new satellites from the latest sync.`);
+                    }
                 } catch (error) {
                     console.error("Failed to fetch new satellites:", error);
                     setStatus("Failed to load new satellites.");
@@ -302,7 +313,18 @@ export default {
                     const { payload } = await fetchJsonWithFallback("/api/catalog/latest-new-satellites", appState.catalogApiBaseUrl);
                     const sats = payload.satellites || [];
                     appState.latestNewSatelliteNames = new Set(sats.map(s => s.name));
-                    setStatus(`Viewing ${sats.length} new satellites from the latest sync.`);
+
+                    // Inject any new satellites that are not yet in the Cesium scene
+                    if (typeof ctx.shared.addNewSatellitesToScene === "function" && sats.length > 0) {
+                        const added = await ctx.shared.addNewSatellitesToScene(sats);
+                        if (added > 0) {
+                            setStatus(`Viewing ${sats.length} new satellites (${added} added to globe).`);
+                        } else {
+                            setStatus(`Viewing ${sats.length} new satellites from the latest sync.`);
+                        }
+                    } else {
+                        setStatus(`Viewing ${sats.length} new satellites from the latest sync.`);
+                    }
                 } catch (error) {
                     console.error("Failed to fetch new satellites:", error);
                     setStatus("Failed to load new satellites.");

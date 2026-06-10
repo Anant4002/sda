@@ -265,53 +265,92 @@ function findTcaBetweenRecords(record1, record2, windowStart, windowDurationSeco
 /**
  * Analytical Probability of Collision (Pc) using the Foster method (2D simplification).
  * Why: Standard in space operations for TLE-based risk assessment.
- * 
- * @param {number} missDistanceKm - Euclidean distance at TCA
- * @param {number} relativeVelocityKmS - Speed at TCA
- * @param {Object} primarySatrec - satrec of the subject satellite
- * @param {Object} secondarySatrec - satrec of the object
- * @param {Date} tcaDate - The date of TCA
- * @param {number} combinedRadiusMeters - Hard-body radius (default 10m)
+ *
+ * Sigma estimation uses orbit-class-aware covariance tables rather than a flat
+ * heuristic, providing more realistic Pc values per orbital regime:
+ *
+ *   LEO (< 2000 km):  base 0.10 km, growth 0.50 km/day  (dense tracking, frequent TLEs)
+ *   MEO (2000–20000): base 0.50 km, growth 1.00 km/day
+ *   GEO (≈35786 km):  base 0.30 km, growth 0.20 km/day  (stable, less perturbation)
+ *   HEO / Unknown:    base 1.00 km, growth 2.00 km/day  (conservative fallback)
+ *
+ * @param {number} missDistanceKm       - Euclidean distance at TCA
+ * @param {number} relativeVelocityKmS  - Speed at TCA
+ * @param {Object} primarySatrec        - satrec of the subject satellite
+ * @param {Object} secondarySatrec      - satrec of the object
+ * @param {Date}   tcaDate              - The date of TCA
+ * @param {number} combinedRadiusMeters - Hard-body radius (default 10 m)
+ * @returns {{ pc: number, pcMethod: string, sigma: number }}
  */
 function calculateFosterPc(missDistanceKm, relativeVelocityKmS, primarySatrec, secondarySatrec, tcaDate, combinedRadiusMeters = 10) {
-    if (missDistanceKm <= 0) return 1.0;
+    if (missDistanceKm <= 0) return { pc: 1.0, pcMethod: 'foster_orbit_class_sigma', sigma: 0 };
 
-    // 1. Estimate Positional Uncertainty (Sigma)
-    // TLEs do not provide covariance. We use a standard heuristic: 
-    // Error grows ~2km per day since epoch.
-    const julianDateToDate = (julianDate) => new Date((julianDate - 2440587.5) * 86400000);
-    const getSigma = (satrec, date) => {
+    // -----------------------------------------------------------------------
+    // 1. Orbit-class sigma estimation
+    // -----------------------------------------------------------------------
+    const julianDateToDate = (jd) => new Date((jd - 2440587.5) * 86400000);
+
+    // Sigma coefficients indexed by orbit class
+    // { baseSigmaKm, growthKmPerDay }
+    const SIGMA_TABLE = {
+        LEO: { base: 0.10, growth: 0.50 },  // < 2000 km mean altitude
+        MEO: { base: 0.50, growth: 1.00 },  // 2000–20000 km
+        GEO: { base: 0.30, growth: 0.20 },  // ~35786 km
+        HEO: { base: 1.00, growth: 2.00 }   // fallback / eccentric / unknown
+    };
+
+    /**
+     * Derive orbit class from mean motion (rev/day stored in satrec.no in rad/min).
+     * satrec.no is in rad/min → convert to rev/day: no_revday = no * 1440 / (2π)
+     */
+    function getOrbitClass(satrec) {
+        if (!satrec || !Number.isFinite(satrec.no)) return 'HEO';
+        const noRevDay = (satrec.no * 1440) / (2 * Math.PI); // rev/day
+        const mu = 398600.4418; // km³/s²
+        const nRadS = (noRevDay * 2 * Math.PI) / 86400;
+        const sma = Math.pow(mu / (nRadS * nRadS), 1 / 3); // semi-major axis km
+        const altKm = sma - 6371; // approximate mean altitude
+
+        if (altKm < 2000)  return 'LEO';
+        if (altKm < 20000) return 'MEO';
+        if (Math.abs(altKm - 35786) < 2000) return 'GEO';
+        return 'HEO';
+    }
+
+    function getSigma(satrec, date) {
+        const orbitClass = getOrbitClass(satrec);
+        const { base, growth } = SIGMA_TABLE[orbitClass];
+
         const epochDate = Number.isFinite(satrec?.jdsatepoch)
             ? julianDateToDate(satrec.jdsatepoch)
             : null;
-        if (!epochDate) {
-            return 1.0;
-        }
+
+        if (!epochDate) return base + growth; // 1-day default if epoch unknown
+
         const daysSinceEpoch = Math.abs(date.getTime() - epochDate.getTime()) / (1000 * 60 * 60 * 24);
-        // Base uncertainty (1km) + 2km per day
-        return (1.0 + 2.0 * daysSinceEpoch);
-    };
+        return base + growth * daysSinceEpoch;
+    }
 
     const sigma1 = getSigma(primarySatrec, tcaDate);
     const sigma2 = getSigma(secondarySatrec, tcaDate);
-    
-    // Combined Sigma in the encounter plane
+
+    // Combined sigma in the encounter plane (RSS)
     const sigma = Math.sqrt(sigma1 * sigma1 + sigma2 * sigma2);
-    
-    // 2. Foster 2D Integration (Simplified for circular hard-body)
-    // Pc = exp(-0.5 * (d/sigma)^2) * (1 - exp(-0.5 * (R/sigma)^2))
-    // Where d = miss distance, R = combined hard-body radius
-    const R = combinedRadiusMeters / 1000; // km
+
+    // -----------------------------------------------------------------------
+    // 2. Foster 2D Integration (simplified for circular hard-body)
+    //    Pc = exp(-0.5 × (d/σ)²) × (1 − exp(-0.5 × (R/σ)²))
+    // -----------------------------------------------------------------------
+    const R = combinedRadiusMeters / 1000; // m → km
     const d = missDistanceKm;
 
     const term1 = Math.exp(-0.5 * Math.pow(d / sigma, 2));
     const term2 = 1 - Math.exp(-0.5 * Math.pow(R / sigma, 2));
-    
-    const pc = term1 * term2;
-    
-    // Clamp to 0..1 range
-    return Math.max(0, Math.min(1.0, pc));
+    const pc = Math.max(0, Math.min(1.0, term1 * term2));
+
+    return { pc, pcMethod: 'foster_orbit_class_sigma', sigma };
 }
+
 
 module.exports = {
     VISIBILITY_ELEVATION_DEG,

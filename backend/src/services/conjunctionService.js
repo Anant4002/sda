@@ -189,7 +189,9 @@ async function analyzeConjunctionsFromRecords(records, area, startTime, horizonM
                         relVelKmS = Math.sqrt(dvx * dvx + dvy * dvy + dvz * dvz);
                     }
 
-                    const pc = calculateFosterPc(minDistance, relVelKmS, primary.satrec, secondary.satrec, bestTca);
+                    const pcResult = calculateFosterPc(minDistance, relVelKmS, primary.satrec, secondary.satrec, bestTca);
+                    const pc = pcResult?.pc ?? pcResult ?? 0;
+                    const pcMethod = pcResult?.pcMethod ?? 'foster_heuristic';
 
                     let severity = "informational";
                     if (minDistance < 1.0 || pc > 1e-4) severity = "critical";
@@ -226,6 +228,7 @@ async function analyzeConjunctionsFromRecords(records, area, startTime, horizonM
                         time: bestTca.toISOString(),
                         relativeVelocityKmS: relVelKmS,
                         collisionProbability: pc,
+                        pcMethod,
                         severity,
                         severityColor,
                         orbitClass,

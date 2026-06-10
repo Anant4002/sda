@@ -278,6 +278,7 @@ async function initializeApplication() {
                 clearHiddenGroups,
                 refreshSatelliteVisibility,
                 refreshCatalogSidebar,
+                addNewSatellitesToScene,
 
                 resetRealTimeClock: () => {
                     appState.realTimeMultiplier = 1;
@@ -731,6 +732,61 @@ async function updateWorkerCatalog(satellites) {
     if (appState.analysisWorkerReady) {
         analysisWorker.postMessage({ type: "init", tles: satellites });
     }
+}
+
+/**
+ * Incrementally add satellites that are not yet tracked in the scene.
+ * Unlike populateSatelliteScene, this does NOT clear existing points.
+ * After adding points it re-initialises both workers with the full catalog
+ * so the new TLEs are propagated immediately.
+ *
+ * @param {Object[]} newSatellites - Array of satellite objects from the API
+ * @returns {number} Number of satellites actually added (those that were missing)
+ */
+async function addNewSatellitesToScene(newSatellites) {
+    if (!Array.isArray(newSatellites) || newSatellites.length === 0) return 0;
+
+    let added = 0;
+    for (const satellite of newSatellites) {
+        if (appState.pointMap.has(satellite.name)) {
+            // Already present — update metadata in case TLE changed
+            appState.satelliteMetaMap.set(satellite.name, satellite);
+            continue;
+        }
+
+        // Register metadata
+        appState.satelliteMetaMap.set(satellite.name, satellite);
+
+        // Create a Cesium point primitive for the satellite
+        const groupLabel = deriveSatelliteGroupLabel(satellite.name);
+        const isHidden = appState.hiddenGroupLabels.has(groupLabel) ||
+            (appState.hideCommercialSatellites && isCommercialSatelliteName(satellite.name));
+
+        const point = satellitePoints.add({
+            pixelSize: satellite.isIndian ? 6.5 : 5,
+            color: Cesium.Color.fromCssColorString(
+                satellite.isIndian ? COLORS.indianSatellite : COLORS.otherSatellite
+            ),
+            id: satellite.name,
+            show: !isHidden
+        });
+
+        appState.pointMap.set(satellite.name, point);
+
+        // Merge into the master satellites array if not already present
+        if (!appState.satellites.some(s => s.name === satellite.name)) {
+            appState.satellites.push(satellite);
+        }
+
+        added++;
+    }
+
+    if (added > 0) {
+        // Re-initialise workers with the updated catalog so the new TLEs are propagated
+        await updateWorkerCatalog(appState.satellites);
+    }
+
+    return added;
 }
 
 // Start the application when the DOM is ready

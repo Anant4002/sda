@@ -36,6 +36,7 @@ const { predictSatelliteReentry } = require("../services/reentryPredictionServic
 const rapidProcessingService = require("../services/rapidProcessingService");
 const orbitalDriftService = require("../services/orbitalDriftService");
 const { getRevisionHistory: getTleHistory } = require("../services/tleRevisionHistoryService");
+const { getSensorRegistry } = require("../services/sensorAdapterService");
 const {
     requireApiKey,
     requireSyncAccess,
@@ -44,6 +45,7 @@ const {
 
 const router = express.Router();
 const MAX_REGION_ANALYSIS_HORIZON_MINUTES = 4320;
+
 
 function normalizeAnalysisHorizonMinutes(value, fallbackMinutes = 60) {
     const parsed = Number(value);
@@ -78,6 +80,22 @@ router.get("/health", (req, res) => {
         ok: true,
         uptimeSeconds: Math.round(process.uptime()),
         timestamp: new Date().toISOString()
+    });
+});
+
+/**
+ * GET /api/sensors
+ * Returns the sensor registry with transparency metadata.
+ * All sensors are currently representative placeholders — dataSource: 'REPRESENTATIVE'.
+ */
+router.get("/sensors", requireApiKey, (req, res) => {
+    const registry = getSensorRegistry();
+    res.json({
+        sensors: registry,
+        totalCount: registry.length,
+        liveCount: registry.filter(s => s.dataSource === 'LIVE').length,
+        representativeCount: registry.filter(s => s.isRepresentative).length,
+        disclaimer: 'All sensors in this registry are representative placeholders. No live sensor integration is active in this deployment.'
     });
 });
 

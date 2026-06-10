@@ -1,31 +1,3 @@
-/**
- * ui.js — Barrel Export (Phase-1 Refactor)
- *
- * This file previously contained all UI rendering logic (~2,226 lines).
- * It has been refactored into focused sub-modules under public/js/ui/.
- *
- * All existing imports of the form:
- *   import { X } from '../../ui.js'  (or './ui.js')
- * continue to work unchanged — this barrel re-exports every public symbol
- * from the sub-modules, preserving the exact same API surface.
- *
- * Sub-module responsibilities:
- *   ui/headerBar.js       — setStatus, renderDefaultAnalysis, updateAreaReadout, renderAnalysisLoader
- *   ui/catalogStatus.js   — renderCatalogStatus, formatDataAge, formatOpLastUpdate
- *   ui/alertRenderer.js   — renderOperationalAlerts, resolveAlertType, buildAlertCard
- *   ui/areaAnalysis.js    — renderAreaAnalysis and all analysis type sub-renderers
- *   ui/satellitePanel.js  — renderSatellitePath, updateCollisionAlert, renderSatelliteListItem
- *
- * Functions that live only in ui.js (large panel renderers not extracted):
- *   renderCharacterisationSummary, renderReentryIntelligence, renderDriftAnalytics,
- *   renderDriftAnalysis, renderManoeuvreAnalysis, renderNeighbourhoodWatchAnalysis,
- *   renderRegionalAccessAnalysis, renderUnifiedThreatInsights, renderSatelliteDirectory
- *   These remain in-line below as a transitional step; they will be extracted
- *   in a subsequent refactor pass.
- *
- * Developer note: do NOT add new top-level functions to this file.
- * Add them to the appropriate sub-module and add an export line here.
- */
 
 // ---------------------------------------------------------------------------
 // EXTERNAL IMPORTS (retained for inline functions below)

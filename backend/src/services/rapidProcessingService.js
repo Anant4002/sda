@@ -503,6 +503,10 @@ async function ingestSensorTrack(trackData) {
         sensorName: sensorInfo.name,
         fitStats: { velocity: fit.velocity, acceleration: fit.acceleration, curvature: fit.curvature },
         smoothStats: { smoothedVelocity: smooth.smoothedVelocity, smoothedAcceleration: smooth.smoothedAcceleration },
+        // Processing transparency metadata
+        processingMethod: 'least_squares_feature_scoring',
+        processingMethodDescription: 'Least-squares track fitting + exponential state smoothing + weighted feature-score classification. No Kalman filter. Confidence improves with more track points (≥5 recommended).',
+        disclaimer: 'Classification uses kinematic feature scoring only. Confidence is indicative, not certified. Real radar/sensor integration is not active in this deployment. Results require operator validation before operational use.',
         timestamp: new Date().toISOString()
     };
 
