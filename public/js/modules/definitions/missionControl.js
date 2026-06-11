@@ -70,6 +70,21 @@ function buildSidebar() {
                     <input id="hideCommercialToggle" type="checkbox">
                     Hide Commercial Satellites
                 </label>
+                
+                <div style="margin: 4px 0; border-top: 1px dashed rgba(255,255,255,0.15);"></div>
+                
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--text-main); font-weight:normal; text-transform:none; font-size:13px;">
+                    <input id="showPayloadsToggle" type="checkbox">
+                    Show Payloads
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--text-main); font-weight:normal; text-transform:none; font-size:13px;">
+                    <input id="showDebrisToggle" type="checkbox">
+                    Show Space Debris
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--text-main); font-weight:normal; text-transform:none; font-size:13px;">
+                    <input id="showRocketBodiesToggle" type="checkbox">
+                    Show Rocket Bodies
+                </label>
             </div>
 
             <div style="margin-top: 10px;">
@@ -149,11 +164,19 @@ function buildSidebar() {
                 <div class="legend" style="padding: 6px; background: rgba(0,0,0,0.2); border-radius: 4px;">
                     <div class="legend-row" style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-main);">
                         <span class="legend-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background:#7cf29a;"></span>
-                        Other active satellites
+                        Active satellites (Payloads)
                     </div>
                     <div class="legend-row" style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-main); margin-top: 4px;">
                         <span class="legend-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background:#ff9933;"></span>
-                        Indian satellites
+                        Indian satellites (Payloads)
+                    </div>
+                    <div class="legend-row" style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-main); margin-top: 4px;">
+                        <span class="legend-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background:#ff4d4d;"></span>
+                        Space Debris
+                    </div>
+                    <div class="legend-row" style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-main); margin-top: 4px;">
+                        <span class="legend-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background:#a2d2ff;"></span>
+                        Rocket Bodies
                     </div>
                 </div>
             </div>
@@ -248,12 +271,18 @@ export default {
         const orbitHEOCheckbox = document.getElementById("orbitHEOCheckbox");
         const prevCatalogPageBtn = document.getElementById("prevCatalogPageBtn");
         const nextCatalogPageBtn = document.getElementById("nextCatalogPageBtn");
+        const showPayloadsToggle = document.getElementById("showPayloadsToggle");
+        const showDebrisToggle = document.getElementById("showDebrisToggle");
+        const showRocketBodiesToggle = document.getElementById("showRocketBodiesToggle");
 
         // Set checkboxes and toggles from state
         if (newSatellitesDetectedToggle) newSatellitesDetectedToggle.checked = appState.showOnlyNewSyncSatellites;
         if (showOnlyIndianToggle) showOnlyIndianToggle.checked = appState.showOnlyIndian;
         if (showOnlyThreatsToggle) showOnlyThreatsToggle.checked = appState.showOnlyThreats;
         if (hideCommercialToggle) hideCommercialToggle.checked = appState.hideCommercialSatellites;
+        if (showPayloadsToggle) showPayloadsToggle.checked = appState.showPayloads;
+        if (showDebrisToggle) showDebrisToggle.checked = appState.showDebris;
+        if (showRocketBodiesToggle) showRocketBodiesToggle.checked = appState.showRocketBodies;
         if (orbitLEOCheckbox) orbitLEOCheckbox.checked = appState.orbitClassFilter.LEO;
         if (orbitMEOCheckbox) orbitMEOCheckbox.checked = appState.orbitClassFilter.MEO;
         if (orbitGEOCheckbox) orbitGEOCheckbox.checked = appState.orbitClassFilter.GEO;
@@ -358,6 +387,30 @@ export default {
             triggerVisibilityUpdate();
             setStatus(appState.hideCommercialSatellites ? "Filtering: Hiding commercial satellites." : "Restored commercial satellites.");
         });
+
+        if (showPayloadsToggle) {
+            scope.add(showPayloadsToggle, "change", () => {
+                appState.showPayloads = Boolean(showPayloadsToggle.checked);
+                triggerVisibilityUpdate();
+                setStatus(appState.showPayloads ? "Payloads shown." : "Payloads hidden.");
+            });
+        }
+
+        if (showDebrisToggle) {
+            scope.add(showDebrisToggle, "change", () => {
+                appState.showDebris = Boolean(showDebrisToggle.checked);
+                triggerVisibilityUpdate();
+                setStatus(appState.showDebris ? "Space debris shown." : "Space debris hidden.");
+            });
+        }
+
+        if (showRocketBodiesToggle) {
+            scope.add(showRocketBodiesToggle, "change", () => {
+                appState.showRocketBodies = Boolean(showRocketBodiesToggle.checked);
+                triggerVisibilityUpdate();
+                setStatus(appState.showRocketBodies ? "Rocket bodies shown." : "Rocket bodies hidden.");
+            });
+        }
 
         const updateOrbitClassFilters = () => {
             appState.orbitClassFilter.LEO = Boolean(orbitLEOCheckbox.checked);

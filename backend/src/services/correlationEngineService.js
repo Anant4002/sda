@@ -3,6 +3,8 @@ const { Op } = require("sequelize");
 const { sequelize } = require("../db");
 const { OperationalAlert } = require("../models/operationalAlert");
 const { Satellite } = require("../models/satellite");
+const { Debris } = require("../models/debris");
+const { RocketBody } = require("../models/rocketBody");
 const { CorrelationRule } = require("../models/correlationRule");
 const { IncidentGroup } = require("../models/incidentGroup");
 const { AlertCorrelation } = require("../models/alertCorrelation");
@@ -651,14 +653,42 @@ async function resolveSatelliteLookup(alertRows) {
 
     const lookup = new Map();
     if (where.length) {
-        const satellites = await Satellite.findAll({
+        const queryOptions = {
             where: {
                 [Op.or]: where
             }
-        });
+        };
+        const satellites = await Satellite.findAll(queryOptions);
+        const debris = await Debris.findAll(queryOptions);
+        const rocketBodies = await RocketBody.findAll(queryOptions);
 
-        for (const satellite of satellites) {
-            const plain = satellite.get({ plain: true });
+        for (const sat of satellites) {
+            const plain = sat.get({ plain: true });
+            plain._modelName = "Satellite";
+            lookup.set(lowerText(plain.name), plain);
+            if (plain.id !== null && plain.id !== undefined) {
+                lookup.set(String(plain.id), plain);
+            }
+            if (plain.noradId !== null && plain.noradId !== undefined) {
+                lookup.set(String(plain.noradId), plain);
+            }
+        }
+
+        for (const deb of debris) {
+            const plain = deb.get({ plain: true });
+            plain._modelName = "Debris";
+            lookup.set(lowerText(plain.name), plain);
+            if (plain.id !== null && plain.id !== undefined) {
+                lookup.set(String(plain.id), plain);
+            }
+            if (plain.noradId !== null && plain.noradId !== undefined) {
+                lookup.set(String(plain.noradId), plain);
+            }
+        }
+
+        for (const rb of rocketBodies) {
+            const plain = rb.get({ plain: true });
+            plain._modelName = "RocketBody";
             lookup.set(lowerText(plain.name), plain);
             if (plain.id !== null && plain.id !== undefined) {
                 lookup.set(String(plain.id), plain);
@@ -1036,8 +1066,8 @@ async function createOrUpdateIncident(alertRow, envelope, satelliteLookup, rules
     const window = buildEventWindow(envelope, config);
 
     const sourceTypes = new Set();
-    const linkedPrimarySat = primaryIdentity.satellite || null;
-    const linkedSecondarySat = secondaryIdentity.satellite || null;
+    const linkedPrimarySat = primaryIdentity.satellite && primaryIdentity.satellite._modelName === "Satellite" ? primaryIdentity.satellite : null;
+    const linkedSecondarySat = secondaryIdentity.satellite && secondaryIdentity.satellite._modelName === "Satellite" ? secondaryIdentity.satellite : null;
 
     if (envelope.sourceType) {
         sourceTypes.add(envelope.sourceType);

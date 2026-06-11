@@ -1,12 +1,11 @@
 const { sequelize } = require("../db");
 const { getCommonSchema } = require("./commonSchema");
 
-const Satellite = sequelize.define("Satellite", getCommonSchema(), {
-    tableName: "satellites",
+const RocketBody = sequelize.define("RocketBody", getCommonSchema(), {
+    tableName: "rocket_bodies",
     timestamps: false
 });
 
 module.exports = {
-    Satellite
+    RocketBody
 };
-

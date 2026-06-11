@@ -1,5 +1,7 @@
 const crypto = require("node:crypto");
 const { Satellite } = require("../models/satellite");
+const { Debris } = require("../models/debris");
+const { RocketBody } = require("../models/rocketBody");
 const { serializeSatellite } = require("./satelliteMetadataService");
 const { createPropagationRecords, haversineKm } = require("./orbitalPropagationService");
 const { operationalConfig } = require("../config/operationalConfig");
@@ -21,7 +23,11 @@ async function loadPropagationRecords() {
     }
 
     const satellites = await Satellite.findAll({ order: [["name", "ASC"]] });
-    cachedPropagationRecords = createPropagationRecords(satellites.map((satelliteRow) => ({
+    const debris = await Debris.findAll({ order: [["name", "ASC"]] });
+    const rocketBodies = await RocketBody.findAll({ order: [["name", "ASC"]] });
+    const allObjects = [...satellites, ...debris, ...rocketBodies];
+
+    cachedPropagationRecords = createPropagationRecords(allObjects.map((satelliteRow) => ({
         ...serializeSatellite(satelliteRow),
         name: satelliteRow.name,
         line1: satelliteRow.line1,

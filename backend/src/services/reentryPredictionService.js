@@ -2,6 +2,8 @@ const tleRevisionHistoryService = require("./tleRevisionHistoryService");
 const { recordOperationalAlert } = require("./operationalAlertService");
 const { parseTleLine2OrbitalMetrics, propagateState, toRadians, haversineKm } = require("./orbitalPropagationService");
 const { Satellite } = require("../models/satellite");
+const { Debris } = require("../models/debris");
+const { RocketBody } = require("../models/rocketBody");
 const satellite = require("satellite.js");
 
 /**
@@ -63,9 +65,22 @@ async function predictSatelliteReentry(noradId, satelliteName, options = {}) {
     let history = await tleRevisionHistoryService.getRevisionHistory(noradId, satelliteName, { limit });
     
     if (history.length === 0) {
-        const currentSat = await Satellite.findOne({
-            where: noradId ? { noradId } : { name: satelliteName }
+        let currentSat = await Satellite.findOne({
+            where: noradId ? { noradId } : { name: satelliteName },
+            transaction
         });
+        if (!currentSat) {
+            currentSat = await Debris.findOne({
+                where: noradId ? { noradId } : { name: satelliteName },
+                transaction
+            });
+        }
+        if (!currentSat) {
+            currentSat = await RocketBody.findOne({
+                where: noradId ? { noradId } : { name: satelliteName },
+                transaction
+            });
+        }
         if (currentSat) {
             history = [{
                 line1: currentSat.line1,

@@ -82,6 +82,13 @@ function buildSatellitePath(satelliteId, startTime, noradId = null) {
         return null;
     }
 
+    let pathColor = record.isIndian ? "#c03d7a" : "#b08d36";
+    if (record.objectType === "Debris") {
+        pathColor = "#ff4d4d";
+    } else if (record.objectType === "Rocket Body") {
+        pathColor = "#a2d2ff";
+    }
+
     return [{
         id: record.id,
         isIndian: record.isIndian,
@@ -91,7 +98,7 @@ function buildSatellitePath(satelliteId, startTime, noradId = null) {
         endTime: new Date(startDate.getTime() + endOffset * 1000).toISOString(),
         startAltKm: samples[0].altKm,
         endAltKm: samples[samples.length - 1].altKm,
-        color: record.isIndian ? "#c03d7a" : "#b08d36",
+        color: pathColor,
         width: 3,
         style: "solid",
         samples
@@ -109,6 +116,7 @@ function initializeCatalog(tles) {
             id: tle.name,
             noradId: tle.noradId,
             isIndian: Boolean(tle.isIndian),
+            objectType: tle.objectType || "Payload",
             meanMotionRevPerDay: parseMeanMotion(tle.line2),
             satrec: satellite.twoline2satrec(tle.line1, tle.line2)
         }))

@@ -137,6 +137,20 @@ function refreshSatelliteVisibility() {
         
         let show = !isGroupHidden && !isCommercialHidden;
 
+        const isPayload = satellite.objectType === "Payload" || !satellite.objectType;
+        const isDebris = satellite.objectType === "Debris";
+        const isRocketBody = satellite.objectType === "Rocket Body";
+
+        if (show && isPayload && !appState.showPayloads) {
+            show = false;
+        }
+        if (show && isDebris && !appState.showDebris) {
+            show = false;
+        }
+        if (show && isRocketBody && !appState.showRocketBodies) {
+            show = false;
+        }
+
         // Mission Control - Added in Last 30 Days filter
         if (show && appState.addedLast30Days) {
             const addedTime = satellite.firstAddedAt ? new Date(satellite.firstAddedAt).getTime() : 0;
@@ -653,12 +667,21 @@ async function initializeApplication() {
                     const meta = appState.satelliteMetaMap.get(satelliteId);
 
                     if (elements.hoverPanel) {
-                        const statusLabel = meta?.isIndian ? '<span style="color: #ff5ea8;">[INDIAN ASSET]</span>' : "Active Satellite";
+                        let typeLabel = meta?.objectType || "Payload";
+                        if (meta?.isIndian && typeLabel === "Payload") {
+                            typeLabel = '<span style="color: #ff9933;">Indian Payload</span>';
+                        } else if (meta?.isIndian) {
+                            typeLabel = `<span style="color: #ff9933;">Indian ${typeLabel}</span>`;
+                        } else if (typeLabel === "Debris") {
+                            typeLabel = '<span style="color: #ff4d4d;">Debris</span>';
+                        } else if (typeLabel === "Rocket Body") {
+                            typeLabel = '<span style="color: #a2d2ff;">Rocket Body</span>';
+                        }
 
                         elements.hoverPanel.innerHTML = `
                             <div style="font-weight: bold; font-size: 1.1em; color: var(--text-bright); margin-bottom: 4px;">${escapeHtml(satelliteId)}</div>
                             <div style="font-size: 0.85em; color: var(--text-dim);">
-                                ${statusLabel}<br>
+                                Type: ${typeLabel}<br>
                                 Source: ${escapeHtml(meta?.dataSource || "N/A")}<br>
                                 NORAD: ${meta?.noradId || "N/A"}<br>
                                 ${meta?.intData ? `<div style="margin-top:4px; border-top: 1px solid rgba(255,255,255,0.1); padding-top:4px; font-style: italic;">INT: ${escapeHtml(meta.intData)}</div>` : ""}
@@ -711,11 +734,23 @@ async function populateSatelliteScene(satellites) {
             const groupLabel = deriveSatelliteGroupLabel(satellite.name);
             const isHidden = appState.hiddenGroupLabels.has(groupLabel) || (appState.hideCommercialSatellites && isCommercialSatelliteName(satellite.name));
 
+            let size = 5;
+            let colorStr = COLORS.otherSatellite;
+
+            if (satellite.objectType === "Debris") {
+                size = 4;
+                colorStr = COLORS.debris;
+            } else if (satellite.objectType === "Rocket Body") {
+                size = 5.5;
+                colorStr = COLORS.rocketBody;
+            } else {
+                size = satellite.isIndian ? 6.5 : 5;
+                colorStr = satellite.isIndian ? COLORS.indianSatellite : COLORS.otherSatellite;
+            }
+
             const point = satellitePoints.add({
-                pixelSize: satellite.isIndian ? 6.5 : 5,
-                color: Cesium.Color.fromCssColorString(
-                    satellite.isIndian ? COLORS.indianSatellite : COLORS.otherSatellite
-                ),
+                pixelSize: size,
+                color: Cesium.Color.fromCssColorString(colorStr),
                 id: satellite.name,
                 show: !isHidden
             });
@@ -762,11 +797,23 @@ async function addNewSatellitesToScene(newSatellites) {
         const isHidden = appState.hiddenGroupLabels.has(groupLabel) ||
             (appState.hideCommercialSatellites && isCommercialSatelliteName(satellite.name));
 
+        let size = 5;
+        let colorStr = COLORS.otherSatellite;
+
+        if (satellite.objectType === "Debris") {
+            size = 4;
+            colorStr = COLORS.debris;
+        } else if (satellite.objectType === "Rocket Body") {
+            size = 5.5;
+            colorStr = COLORS.rocketBody;
+        } else {
+            size = satellite.isIndian ? 6.5 : 5;
+            colorStr = satellite.isIndian ? COLORS.indianSatellite : COLORS.otherSatellite;
+        }
+
         const point = satellitePoints.add({
-            pixelSize: satellite.isIndian ? 6.5 : 5,
-            color: Cesium.Color.fromCssColorString(
-                satellite.isIndian ? COLORS.indianSatellite : COLORS.otherSatellite
-            ),
+            pixelSize: size,
+            color: Cesium.Color.fromCssColorString(colorStr),
             id: satellite.name,
             show: !isHidden
         });

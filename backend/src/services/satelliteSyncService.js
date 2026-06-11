@@ -1,7 +1,9 @@
 const axios = require("axios");
 const { Satellite } = require("../models/satellite");
+const { Debris } = require("../models/debris");
+const { RocketBody } = require("../models/rocketBody");
 const { sequelize } = require("../db");
-const { catalogSource, tleSourceUrl } = require("../config");
+const { catalogSource, tleSourceUrl, spacetrackConfig } = require("../config");
 const { SatelliteCatalogVersion } = require("../models/satelliteCatalogVersion");
 const { CatalogEvent } = require("../models/catalogEvent");
 const { CatalogSyncRun } = require("../models/catalogSyncRun");
@@ -40,6 +42,42 @@ async function fetchSatelliteCatalog() {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" 
         },
         timeout: 30000
+    });
+    return parseTleCatalog(response.data);
+}
+
+async function fetchSpaceTrackCatalog(url) {
+    if (!spacetrackConfig.username || !spacetrackConfig.password) {
+        console.warn("Space-Track credentials not configured. Skipping sync for: " + url);
+        return [];
+    }
+    console.log(`Authenticating with Space-Track...`);
+    const loginParams = new URLSearchParams();
+    loginParams.append("identity", spacetrackConfig.username);
+    loginParams.append("password", spacetrackConfig.password);
+
+    const loginResponse = await axios.post("https://www.space-track.org/ajaxauth/login", loginParams.toString(), {
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        },
+        timeout: 30000
+    });
+
+    const cookies = loginResponse.headers["set-cookie"];
+    if (!cookies || cookies.length === 0) {
+        throw new Error("Failed to authenticate with Space-Track: No session cookies returned.");
+    }
+
+    const cookieHeader = cookies.map(c => c.split(";")[0]).join("; ");
+
+    console.log(`Fetching TLE data from Space-Track for URL: ${url}`);
+    const response = await axios.get(url, {
+        headers: {
+            "Cookie": cookieHeader,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        },
+        timeout: 60000
     });
     return parseTleCatalog(response.data);
 }
@@ -92,109 +130,170 @@ async function recordCatalogVersion(satellites, transaction, options = {}) {
 async function syncSatellites() {
     const startedAt = new Date();
     try {
-        console.log("Fetching TLE data from CelesTrak...");
-        let satelliteBatch;
+        let satelliteBatch = [];
         try {
+            console.log("Fetching TLE data from CelesTrak...");
             const startFetch = Date.now();
             satelliteBatch = await fetchSatelliteCatalog();
-            console.log(`Fetched ${satelliteBatch.length} satellites in ${Date.now() - startFetch}ms`);
+            console.log(`Fetched ${satelliteBatch.length} active satellites from CelesTrak in ${Date.now() - startFetch}ms`);
         } catch (error) {
-            if (error.response && error.response.status === 403) {
-                console.log("CelesTrak catalog not yet updated or access limited (403). Recording check-in time.");
-                // Record a "baseline" version so the UI shows we checked
-                await sequelize.transaction(async (transaction) => {
-                    const existingSats = await Satellite.findAll({ transaction });
-                    await recordCatalogVersion(existingSats, transaction, { 
-                        status: "baseline",
-                        errorMessage: "Source returned 403 (Rate limited or No Update)" 
-                    });
+            console.error("Failed to fetch CelesTrak catalog:", error.message);
+            if (!spacetrackConfig.username || !spacetrackConfig.password) {
+                if (error.response && error.response.status === 403) {
+                    console.log("CelesTrak catalog not yet updated or access limited (403). Recording check-in time.");
+                    await sequelize.transaction(async (transaction) => {
+                        const existingSats = await Satellite.findAll({ transaction });
+                        await recordCatalogVersion(existingSats, transaction, { 
+                            status: "baseline",
+                            errorMessage: "Source returned 403 (Rate limited or No Update)" 
+                        });
 
-                    // Record a sync run with 0 new satellites to update the verification timestamp
-                    await CatalogSyncRun.create({
-                        startedAt,
-                        completedAt: new Date(),
-                        totalBefore: existingSats.length,
-                        totalAfter: existingSats.length,
-                        newSatellitesFound: 0
-                    }, { transaction });
-                });
-                const count = await Satellite.count();
-                return count;
+                        await CatalogSyncRun.create({
+                            startedAt,
+                            completedAt: new Date(),
+                            totalBefore: existingSats.length,
+                            totalAfter: existingSats.length,
+                            newSatellitesFound: 0
+                        }, { transaction });
+                    });
+                    const count = await Satellite.count();
+                    return count;
+                }
+                throw error;
             }
-            throw error;
         }
 
-        if (!satelliteBatch.length) throw new Error("No satellites were parsed from the TLE source.");
+        let debrisBatch = [];
+        let rocketBodyBatch = [];
+        if (spacetrackConfig.username && spacetrackConfig.password) {
+            if (spacetrackConfig.debrisUrl) {
+                try {
+                    const startFetch = Date.now();
+                    debrisBatch = await fetchSpaceTrackCatalog(spacetrackConfig.debrisUrl);
+                    console.log(`Fetched ${debrisBatch.length} debris objects from Space-Track in ${Date.now() - startFetch}ms`);
+                } catch (err) {
+                    console.error("Failed to fetch debris from Space-Track:", err.message);
+                }
+            }
+            if (spacetrackConfig.rocketBodiesUrl) {
+                try {
+                    const startFetch = Date.now();
+                    rocketBodyBatch = await fetchSpaceTrackCatalog(spacetrackConfig.rocketBodiesUrl);
+                    console.log(`Fetched ${rocketBodyBatch.length} rocket bodies from Space-Track in ${Date.now() - startFetch}ms`);
+                } catch (err) {
+                    console.error("Failed to fetch rocket bodies from Space-Track:", err.message);
+                }
+            }
+        }
+
+        const totalFetchedCount = satelliteBatch.length + debrisBatch.length + rocketBodyBatch.length;
+        if (totalFetchedCount === 0) {
+            throw new Error("No satellites, debris, or rocket bodies were parsed from any TLE source.");
+        }
 
         const syncedAt = new Date();
         let versionId = null;
 
-        // Step 1: Main Update Transaction (Fast)
         console.log("Starting database update transaction and manoeuvre evaluation...");
         await sequelize.transaction(async (transaction) => {
-            const existingRows = await Satellite.findAll({ transaction });
-            console.log(`Comparing with ${existingRows.length} existing satellites...`);
-            
-            const previousSatellites = existingRows.map((row) => serializeSatellite(row));
-            const incomingSatellites = satelliteBatch.map((row) => ({
-                ...row,
-                isIndian: isIndianSatelliteName(row.name)
+            const existingSats = await Satellite.findAll({ transaction });
+            const existingDebris = await Debris.findAll({ transaction });
+            const existingRocketBodies = await RocketBody.findAll({ transaction });
+
+            const totalBefore = existingSats.length + existingDebris.length + existingRocketBodies.length;
+
+            console.log(`Comparing with existing records (${existingSats.length} satellites, ${existingDebris.length} debris, ${existingRocketBodies.length} rocket bodies)...`);
+
+            if (satelliteBatch.length > 0) {
+                const previousSatellites = existingSats.map((row) => serializeSatellite(row));
+                const incomingSatellites = satelliteBatch.map((row) => ({
+                    ...row,
+                    isIndian: isIndianSatelliteName(row.name)
+                }));
+
+                const startEval = Date.now();
+                const manoeuvreEvaluation = await evaluateCatalogManoeuvres({
+                    previousSatellites,
+                    incomingSatellites,
+                    referenceDate: syncedAt
+                });
+                console.log(`Manoeuvre evaluation complete in ${Date.now() - startEval}ms. Found ${manoeuvreEvaluation.findings.length} significant events.`);
+
+                await recordManoeuvreDetections(manoeuvreEvaluation.findings, {
+                    sourceName: "Catalog Sync Manoeuvre Detection",
+                    sourceType: "backend_manoeuvre_detection_catalog_sync",
+                    analysisTime: syncedAt.toISOString(),
+                    sequelizeOptions: { transaction }
+                });
+            }
+
+            const existingSatNoradIds = new Set(existingSats.map(row => row.noradId).filter(id => id !== null));
+            const newSatellites = satelliteBatch.filter(s => s.noradId && !existingSatNoradIds.has(s.noradId));
+
+            const existingDebrisNoradIds = new Set(existingDebris.map(row => row.noradId).filter(id => id !== null));
+            const newDebris = debrisBatch.filter(s => s.noradId && !existingDebrisNoradIds.has(s.noradId));
+
+            const existingRocketBodyNoradIds = new Set(existingRocketBodies.map(row => row.noradId).filter(id => id !== null));
+            const newRocketBodies = rocketBodyBatch.filter(s => s.noradId && !existingRocketBodyNoradIds.has(s.noradId));
+
+            const totalNewFound = newSatellites.length + newDebris.length + newRocketBodies.length;
+            console.log(`Found new items to insert: ${newSatellites.length} satellites, ${newDebris.length} debris, ${newRocketBodies.length} rocket bodies.`);
+
+            const toInsertSats = newSatellites.map(s => ({
+                ...s,
+                dataSource: "CELESTRAK",
+                catalogStatus: "CORRELATED",
+                isIndigenous: false,
+                firstAddedAt: startedAt
             }));
 
-            const startEval = Date.now();
-            const manoeuvreEvaluation = await evaluateCatalogManoeuvres({
-                previousSatellites,
-                incomingSatellites,
-                referenceDate: syncedAt
-            });
-            console.log(`Manoeuvre evaluation complete in ${Date.now() - startEval}ms. Found ${manoeuvreEvaluation.findings.length} significant events.`);
+            const toInsertDebris = newDebris.map(s => ({
+                ...s,
+                dataSource: "SPACETRACK",
+                catalogStatus: "CORRELATED",
+                isIndigenous: false,
+                firstAddedAt: startedAt
+            }));
 
-            await recordManoeuvreDetections(manoeuvreEvaluation.findings, {
-                sourceName: "Catalog Sync Manoeuvre Detection",
-                sourceType: "backend_manoeuvre_detection_catalog_sync",
-                analysisTime: syncedAt.toISOString(),
-                sequelizeOptions: { transaction }
-            });
+            const toInsertRocketBodies = newRocketBodies.map(s => ({
+                ...s,
+                dataSource: "SPACETRACK",
+                catalogStatus: "CORRELATED",
+                isIndigenous: false,
+                firstAddedAt: startedAt
+            }));
 
-            // Compare incoming NORAD IDs against satellites already stored in the database
-            const existingNoradIds = new Set(
-                existingRows.map(row => row.noradId).filter(id => id !== null && id !== undefined)
-            );
-            const newSatellites = satelliteBatch.filter(s => s.noradId && !existingNoradIds.has(s.noradId));
-            
-            console.log(`Found ${newSatellites.length} new satellites to insert out of ${satelliteBatch.length} fetched TLEs.`);
-
-            // Prepare batch for insertion
-            const toInsert = newSatellites.map(s => {
-                return {
-                    ...s,
-                    dataSource: "CELESTRAK",
-                    catalogStatus: "CORRELATED",
-                    isIndigenous: false,
-                    firstAddedAt: startedAt
-                };
-            });
-
-            if (toInsert.length > 0) {
-                await Satellite.bulkCreate(toInsert, { transaction });
+            if (toInsertSats.length > 0) {
+                await Satellite.bulkCreate(toInsertSats, { transaction });
             }
-            console.log("Satellite records updated. Recording version...");
-            const version = await recordCatalogVersion(satelliteBatch, transaction, { syncedAt });
+            if (toInsertDebris.length > 0) {
+                await Debris.bulkCreate(toInsertDebris, { transaction });
+            }
+            if (toInsertRocketBodies.length > 0) {
+                await RocketBody.bulkCreate(toInsertRocketBodies, { transaction });
+            }
+
+            console.log("Database records updated. Recording version...");
+            const combinedBatch = [...satelliteBatch, ...debrisBatch, ...rocketBodyBatch];
+            const version = await recordCatalogVersion(combinedBatch, transaction, { 
+                syncedAt,
+                sourceName: "Combined Space Catalog",
+                sourceUrl: tleSourceUrl
+            });
             versionId = version.id;
 
-            // Create a sync run record
             const syncRun = await CatalogSyncRun.create({
                 startedAt,
                 completedAt: new Date(),
-                totalBefore: existingRows.length,
-                totalAfter: existingRows.length + newSatellites.length,
-                newSatellitesFound: newSatellites.length
+                totalBefore,
+                totalAfter: totalBefore + totalNewFound,
+                newSatellitesFound: totalNewFound
             }, { transaction });
 
-            // Store every newly detected NORAD ID
-            if (newSatellites.length > 0) {
+            const allNewObjects = [...newSatellites, ...newDebris, ...newRocketBodies];
+            if (allNewObjects.length > 0) {
                 await CatalogSyncNewSatellite.bulkCreate(
-                    newSatellites.map(s => ({
+                    allNewObjects.map(s => ({
                         syncRunId: syncRun.id,
                         noradId: s.noradId,
                         detectedAt: startedAt
@@ -204,16 +303,14 @@ async function syncSatellites() {
             }
         });
 
-        // Step 2: Historical Persistence (Separate, optimized bulk)
-        // This no longer blocks the main Satellite table for several minutes.
         console.log("Persisting TLE history (bulk)...");
-        await persistTleRevisions(satelliteBatch, versionId, {
-            source: { name: catalogSource.name, url: catalogSource.url }
+        const combinedBatch = [...satelliteBatch, ...debrisBatch, ...rocketBodyBatch];
+        await persistTleRevisions(combinedBatch, versionId, {
+            source: { name: "Combined Space Catalog", url: tleSourceUrl }
         }).catch(err => {
             console.error("TLE History background persistence failed:", err);
         });
 
-        // Step 3: Automated Re-entry Monitoring (Proposal Requirement 5)
         console.log("Evaluating re-entry risks for decaying objects...");
         const { evaluateReentryRisks } = require("./reentryPredictionService");
         await evaluateReentryRisks().catch(err => {
@@ -221,8 +318,8 @@ async function syncSatellites() {
         });
 
         clearSatelliteCatalogCache();
-        console.log(`Successfully synced ${satelliteBatch.length} satellites.`);
-        return satelliteBatch.length;
+        console.log(`Successfully synced ${totalFetchedCount} objects.`);
+        return totalFetchedCount;
     } catch (error) {
         console.error("Sync failed:", error);
         await recordCatalogEvent(null, {
@@ -237,6 +334,7 @@ async function syncSatellites() {
 
 module.exports = {
     fetchSatelliteCatalog,
+    fetchSpaceTrackCatalog,
     parseTleCatalog,
     syncSatellites
 };

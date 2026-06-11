@@ -5,6 +5,8 @@ const { parseTleCatalog, syncSatellites } = satelliteSyncService;
 const axios = require("axios");
 const { sequelize } = require("../backend/src/db");
 const { Satellite } = require("../backend/src/models/satellite");
+const { Debris } = require("../backend/src/models/debris");
+const { RocketBody } = require("../backend/src/models/rocketBody");
 const { SatelliteCatalogVersion } = require("../backend/src/models/satelliteCatalogVersion");
 const { CatalogEvent } = require("../backend/src/models/catalogEvent");
 const { CatalogSyncRun } = require("../backend/src/models/catalogSyncRun");
@@ -40,11 +42,34 @@ test("parseTleCatalog returns an empty array for empty input", () => {
 });
 
 test("syncSatellites records a catalog version and audit event", async () => {
+    const { spacetrackConfig } = require("../backend/src/config");
+    const operationalAlertService = require("../backend/src/services/operationalAlertService");
+    const reentryPredictionService = require("../backend/src/services/reentryPredictionService");
+    const tleRevisionHistoryService = require("../backend/src/services/tleRevisionHistoryService");
+
+    const originalUsername = spacetrackConfig.username;
+    const originalPassword = spacetrackConfig.password;
+    spacetrackConfig.username = "";
+    spacetrackConfig.password = "";
+
+    const originalRecordManoeuvreDetections = operationalAlertService.recordManoeuvreDetections;
+    operationalAlertService.recordManoeuvreDetections = async () => ({ persistedCount: 0, alerts: [] });
+
+    const originalEvaluateReentryRisks = reentryPredictionService.evaluateReentryRisks;
+    reentryPredictionService.evaluateReentryRisks = async () => [];
+
+    const originalPersistTleRevisions = tleRevisionHistoryService.persistTleRevisions;
+    tleRevisionHistoryService.persistTleRevisions = async () => undefined;
+
     const originalAxiosGet = axios.get;
     const originalTransaction = sequelize.transaction;
     const originalFindAll = Satellite.findAll;
     const originalDestroy = Satellite.destroy;
     const originalBulkCreate = Satellite.bulkCreate;
+    const originalDebrisFindAll = Debris.findAll;
+    const originalDebrisBulkCreate = Debris.bulkCreate;
+    const originalRocketBodyFindAll = RocketBody.findAll;
+    const originalRocketBodyBulkCreate = RocketBody.bulkCreate;
     const originalVersionCreate = SatelliteCatalogVersion.create;
     const originalEventCreate = CatalogEvent.create;
     const originalSyncRunCreate = CatalogSyncRun.create;
@@ -59,6 +84,10 @@ test("syncSatellites records a catalog version and audit event", async () => {
     Satellite.findAll = async () => [];
     Satellite.destroy = async () => undefined;
     Satellite.bulkCreate = async () => undefined;
+    Debris.findAll = async () => [];
+    Debris.bulkCreate = async () => [];
+    RocketBody.findAll = async () => [];
+    RocketBody.bulkCreate = async () => [];
     SatelliteCatalogVersion.create = async (payload) => {
         createCalls.push(payload);
         return { id: 1, ...payload };
@@ -82,11 +111,20 @@ test("syncSatellites records a catalog version and audit event", async () => {
         assert.equal(createCalls[0].status, "success");
         assert.match(eventCalls[0].message, /Synced 2 satellites/i);
     } finally {
+        spacetrackConfig.username = originalUsername;
+        spacetrackConfig.password = originalPassword;
+        operationalAlertService.recordManoeuvreDetections = originalRecordManoeuvreDetections;
+        reentryPredictionService.evaluateReentryRisks = originalEvaluateReentryRisks;
+        tleRevisionHistoryService.persistTleRevisions = originalPersistTleRevisions;
         axios.get = originalAxiosGet;
         sequelize.transaction = originalTransaction;
         Satellite.findAll = originalFindAll;
         Satellite.destroy = originalDestroy;
         Satellite.bulkCreate = originalBulkCreate;
+        Debris.findAll = originalDebrisFindAll;
+        Debris.bulkCreate = originalDebrisBulkCreate;
+        RocketBody.findAll = originalRocketBodyFindAll;
+        RocketBody.bulkCreate = originalRocketBodyBulkCreate;
         SatelliteCatalogVersion.create = originalVersionCreate;
         CatalogEvent.create = originalEventCreate;
         CatalogSyncRun.create = originalSyncRunCreate;

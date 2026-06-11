@@ -1,6 +1,8 @@
 const crypto = require("node:crypto");
 const { Op } = require("sequelize");
 const { Satellite } = require("../models/satellite");
+const { Debris } = require("../models/debris");
+const { RocketBody } = require("../models/rocketBody");
 const { SatelliteCatalogVersion } = require("../models/satelliteCatalogVersion");
 const { CatalogEvent } = require("../models/catalogEvent");
 const { CatalogSyncRun } = require("../models/catalogSyncRun");
@@ -111,20 +113,70 @@ async function listSatellites(options = {}) {
         where.isIndigenous = normalizedOptions.isIndigenous;
     }
 
-    const satellites = await Satellite.findAll({
+    const queryOptions = {
         attributes: LEGACY_SAFE_SATELLITE_ATTRIBUTES,
         where,
-        order: [["name", "ASC"]],
-        ...(normalizedOptions.limit ? { limit: normalizedOptions.limit } : {}),
-        ...(normalizedOptions.offset ? { offset: normalizedOptions.offset } : {})
+        order: [["name", "ASC"]]
+    };
+
+    const [satellites, debris, rocketBodies] = await Promise.all([
+        Satellite.findAll(queryOptions),
+        Debris.findAll(queryOptions),
+        RocketBody.findAll(queryOptions)
+    ]);
+
+    const serializedSats = satellites.map(s => {
+        const ser = serializeSatellite(s);
+        ser.objectType = "Payload";
+        if (ser.characterisation) {
+            ser.characterisation.objectType = "Payload";
+        }
+        return ser;
     });
 
-    const serializedSatellites = satellites
-        .map(serializeSatellite)
-        .filter((satellite) => !normalizedOptions.indianOnly || satellite.isIndian);
+    const serializedDebris = debris.map(d => {
+        const ser = serializeSatellite(d);
+        ser.objectType = "Debris";
+        if (ser.characterisation) {
+            ser.characterisation.objectType = "Debris";
+        }
+        return ser;
+    });
 
-    setCachedCatalog(cacheKey, serializedSatellites);
-    return serializedSatellites;
+    const serializedRocketBodies = rocketBodies.map(r => {
+        const ser = serializeSatellite(r);
+        ser.objectType = "Rocket Body";
+        if (ser.characterisation) {
+            ser.characterisation.objectType = "Rocket Body";
+        }
+        return ser;
+    });
+
+    let merged = [...serializedSats, ...serializedDebris, ...serializedRocketBodies];
+
+    if (normalizedOptions.indianOnly) {
+        merged = merged.filter((satellite) => satellite.isIndian);
+    }
+
+    // Sort by name ASC
+    merged.sort((a, b) => {
+        const nameA = (a.name || "").toLowerCase();
+        const nameB = (b.name || "").toLowerCase();
+        if (nameA < nameB) return -1;
+        if (nameA > nameB) return 1;
+        return 0;
+    });
+
+    // In-memory pagination
+    if (normalizedOptions.offset > 0) {
+        merged = merged.slice(normalizedOptions.offset);
+    }
+    if (normalizedOptions.limit !== null) {
+        merged = merged.slice(0, normalizedOptions.limit);
+    }
+
+    setCachedCatalog(cacheKey, merged);
+    return merged;
 }
 
 async function getCatalogStatus() {
@@ -136,7 +188,13 @@ async function getCatalogStatus() {
         order: [["completedAt", "DESC"]]
     });
 
-    const currentCount = await Satellite.count();
+    const [satCount, debrisCount, rbCount] = await Promise.all([
+        Satellite.count(),
+        Debris.count(),
+        RocketBody.count()
+    ]);
+    const currentCount = satCount + debrisCount + rbCount;
+
     const latestVersionPlain = latestVersion ? latestVersion.get({ plain: true }) : null;
     const latestSyncRunPlain = latestSyncRun ? latestSyncRun.get({ plain: true }) : null;
     const dataAgeSeconds = latestVersionPlain ? Math.max(0, Math.round((Date.now() - new Date(latestVersionPlain.syncedAt).getTime()) / 1000)) : null;
@@ -176,16 +234,20 @@ async function seedCatalogHistoryIfMissing() {
         return false;
     }
 
-    const satellites = await Satellite.findAll({
-        order: [["name", "ASC"]]
-    });
+    const [satellites, debris, rocketBodies] = await Promise.all([
+        Satellite.findAll({ order: [["name", "ASC"]] }),
+        Debris.findAll({ order: [["name", "ASC"]] }),
+        RocketBody.findAll({ order: [["name", "ASC"]] })
+    ]);
 
-    if (!satellites.length) {
+    const allObjects = [...satellites, ...debris, ...rocketBodies];
+
+    if (!allObjects.length) {
         return false;
     }
 
     const syncedAt = new Date();
-    const checksum = computeCatalogChecksum(satellites);
+    const checksum = computeCatalogChecksum(allObjects);
 
     await sequelize.transaction(async (transaction) => {
         const version = await SatelliteCatalogVersion.create({
@@ -193,7 +255,7 @@ async function seedCatalogHistoryIfMissing() {
             sourceUrl: catalogSource.url,
             fetchedAt: syncedAt,
             syncedAt,
-            recordCount: satellites.length,
+            recordCount: allObjects.length,
             checksum,
             status: "baseline",
             errorMessage: null
@@ -203,16 +265,16 @@ async function seedCatalogHistoryIfMissing() {
             startedAt: syncedAt,
             completedAt: syncedAt,
             totalBefore: 0,
-            totalAfter: satellites.length,
+            totalAfter: allObjects.length,
             newSatellitesFound: 0
         }, { transaction });
 
         await CatalogEvent.create({
             eventType: "catalog_history_seeded",
             severity: "info",
-            message: `Seeded catalog history from ${satellites.length} existing live satellite records.`,
+            message: `Seeded catalog history from ${allObjects.length} existing live space objects.`,
             details: {
-                recordCount: satellites.length,
+                recordCount: allObjects.length,
                 checksum,
                 status: "baseline"
             },
@@ -223,7 +285,7 @@ async function seedCatalogHistoryIfMissing() {
 
         // Seed initial TLE revisions from live data
         await persistTleRevisions(
-            satellites.map(s => ({
+            allObjects.map(s => ({
                 name: s.name,
                 line1: s.line1,
                 line2: s.line2,
@@ -253,11 +315,16 @@ async function getPreviousCatalogVersionInfo(versionId = null) {
 }
 
 async function batchCharacteriseSatellites() {
-    const satellites = await Satellite.findAll();
+    const [satellites, debris, rocketBodies] = await Promise.all([
+        Satellite.findAll(),
+        Debris.findAll(),
+        RocketBody.findAll()
+    ]);
+    const allObjects = [...satellites, ...debris, ...rocketBodies];
     let updated = 0;
 
     const summary = {
-        totalProcessed: satellites.length,
+        totalProcessed: allObjects.length,
         orbitBreakdown: { LEO: 0, MEO: 0, GEO: 0, HEO: 0, Unknown: 0 },
         objectTypeBreakdown: { Payload: 0, Debris: 0, "Rocket Body": 0, Unknown: 0 },
         operationalStatusBreakdown: { Active: 0, Inactive: 0, Decaying: 0, Stale: 0, Unknown: 0 },
@@ -266,8 +333,8 @@ async function batchCharacteriseSatellites() {
 
     // Use a small chunk size and setImmediate to allow the event loop to breathe
     const CHUNK_SIZE = 100;
-    for (let i = 0; i < satellites.length; i += CHUNK_SIZE) {
-        const chunk = satellites.slice(i, i + CHUNK_SIZE);
+    for (let i = 0; i < allObjects.length; i += CHUNK_SIZE) {
+        const chunk = allObjects.slice(i, i + CHUNK_SIZE);
         
         await Promise.all(chunk.map(async (s) => {
             const characterisation = characteriseSatellite(s.name, s.line1, s.line2);
@@ -300,18 +367,31 @@ async function updateSatelliteIntData(id, intData) {
     // 1. Try finding by Primary Key if the ID is numeric
     if (/^\d+$/.test(id)) {
         satellite = await Satellite.findByPk(id);
+        if (!satellite) {
+            satellite = await Debris.findByPk(id);
+        }
+        if (!satellite) {
+            satellite = await RocketBody.findByPk(id);
+        }
     }
 
     // 2. Fallback to finding by name or NORAD ID if not found by PK
     if (!satellite) {
-        satellite = await Satellite.findOne({
+        const whereClause = {
             where: {
                 [Op.or]: [
                     { name: id },
                     { noradId: /^\d+$/.test(id) ? parseInt(id, 10) : null }
                 ].filter(c => c.name || c.noradId !== null)
             }
-        });
+        };
+        satellite = await Satellite.findOne(whereClause);
+        if (!satellite) {
+            satellite = await Debris.findOne(whereClause);
+        }
+        if (!satellite) {
+            satellite = await RocketBody.findOne(whereClause);
+        }
     }
 
     if (!satellite) {
@@ -321,6 +401,31 @@ async function updateSatelliteIntData(id, intData) {
     await satellite.update({ intData });
     clearSatelliteCatalogCache();
     return serializeSatellite(satellite);
+}
+
+async function findSpaceObject(query, transaction = null) {
+    let where = {};
+    if (query && (query.noradId !== undefined || query.name !== undefined)) {
+        where = query;
+    } else {
+        const parsed = parseInt(query, 10);
+        if (!isNaN(parsed)) {
+            where.noradId = parsed;
+        } else {
+            where.name = query;
+        }
+    }
+
+    let instance = await Satellite.findOne({ where, transaction });
+    if (instance) return { instance, objectType: "Satellite" };
+
+    instance = await Debris.findOne({ where, transaction });
+    if (instance) return { instance, objectType: "Debris" };
+
+    instance = await RocketBody.findOne({ where, transaction });
+    if (instance) return { instance, objectType: "RocketBody" };
+
+    return null;
 }
 
 /**
@@ -348,14 +453,42 @@ async function ingestTrackObservation(data) {
                 catalogStatus: "CORRELATED"
             }
         });
+        if (!matchedSatellite) {
+            matchedSatellite = await Debris.findOne({
+                where: { 
+                    noradId: incomingNoradId,
+                    catalogStatus: "CORRELATED"
+                }
+            });
+        }
+        if (!matchedSatellite) {
+            matchedSatellite = await RocketBody.findOne({
+                where: { 
+                    noradId: incomingNoradId,
+                    catalogStatus: "CORRELATED"
+                }
+            });
+        }
     }
 
     // 3. Fallback: Full orbital correlation scan
     if (!matchedSatellite) {
-        const catalogue = await Satellite.findAll({
-            where: { catalogStatus: "CORRELATED" },
-            attributes: ["id", "name", "line2", "noradId"] // Minimal attributes for speed
-        });
+        const [satellites, debris, rocketBodies] = await Promise.all([
+            Satellite.findAll({
+                where: { catalogStatus: "CORRELATED" },
+                attributes: ["id", "name", "line2", "noradId"]
+            }),
+            Debris.findAll({
+                where: { catalogStatus: "CORRELATED" },
+                attributes: ["id", "name", "line2", "noradId"]
+            }),
+            RocketBody.findAll({
+                where: { catalogStatus: "CORRELATED" },
+                attributes: ["id", "name", "line2", "noradId"]
+            })
+        ]);
+
+        const catalogue = [...satellites, ...debris, ...rocketBodies];
 
         for (const sat of catalogue) {
             const satState = getOrbitalState(sat.line2);
@@ -429,5 +562,6 @@ module.exports = {
     listSatellites,
     seedCatalogHistoryIfMissing,
     updateSatelliteIntData,
-    ingestTrackObservation
+    ingestTrackObservation,
+    findSpaceObject
 };

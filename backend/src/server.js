@@ -1,6 +1,8 @@
 const { createApp } = require("./app");
 const { sequelize } = require("./db");
 const { Satellite } = require("./models/satellite");
+require("./models/debris");
+require("./models/rocketBody");
 require("./models/satelliteCatalogVersion");
 require("./models/catalogEvent");
 require("./models/operationalAlert");

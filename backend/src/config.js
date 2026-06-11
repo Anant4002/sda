@@ -36,9 +36,17 @@ const catalogSource = {
     url: tleSourceUrl
 };
 
+const spacetrackConfig = {
+    username: process.env.SPACETRACK_USERNAME || "",
+    password: process.env.SPACETRACK_PASSWORD || "",
+    debrisUrl: process.env.SPACETRACK_DEBRIS_URL || "",
+    rocketBodiesUrl: process.env.SPACETRACK_ROCKET_BODIES_URL || ""
+};
+
 module.exports = {
     databaseConfig,
     serverConfig,
     tleSourceUrl,
-    catalogSource
+    catalogSource,
+    spacetrackConfig
 };

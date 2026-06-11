@@ -25,6 +25,8 @@ const {
 } = require("../services/operationalAnalysisService");
 const { syncSatellites, fetchSatelliteCatalog } = require("../services/satelliteSyncService");
 const { Satellite } = require("../models/satellite");
+const { Debris } = require("../models/debris");
+const { RocketBody } = require("../models/rocketBody");
 const { serializeSatellite, isIndianSatelliteName } = require("../services/satelliteMetadataService");
 const { 
     evaluateCatalogManoeuvres, 
@@ -281,13 +283,14 @@ router.get("/catalog/latest-new-satellites", requireApiKey, async (req, res) => 
         const noradIds = newSats.map(ns => ns.noradId);
         const { serializeSatellite } = require("../services/satelliteMetadataService");
 
-        const satellites = await Satellite.findAll({
-            where: {
-                noradId: noradIds
-            }
-        });
+        const [satellites, debris, rocketBodies] = await Promise.all([
+            Satellite.findAll({ where: { noradId: noradIds } }),
+            Debris.findAll({ where: { noradId: noradIds } }),
+            RocketBody.findAll({ where: { noradId: noradIds } })
+        ]);
 
-        const serialized = satellites.map(serializeSatellite);
+        const allObjects = [...satellites, ...debris, ...rocketBodies];
+        const serialized = allObjects.map(serializeSatellite);
         res.json({ satellites: serialized });
     } catch (error) {
         console.error("Failed to load latest new satellites:", error);
@@ -486,11 +489,16 @@ router.post("/analysis/neighbourhood-watch", requireApiKey, async (req, res) => 
 
 router.post("/analysis/batch-manoeuvre-forensics", requireApiKey, async (req, res) => {
     try {
-        const satellites = await Satellite.findAll();
+        const [satellites, debris, rocketBodies] = await Promise.all([
+            Satellite.findAll(),
+            Debris.findAll(),
+            RocketBody.findAll()
+        ]);
+        const allObjects = [...satellites, ...debris, ...rocketBodies];
         let detectedManoeuvres = 0;
         const findings = [];
 
-        for (const sat of satellites) {
+        for (const sat of allObjects) {
             const analysis = await analyzeSatelliteManoeuvreHistory(sat.noradId, sat.name, { limit: 100 });
             if (analysis.manoeuvres.length > 0) {
                 detectedManoeuvres += analysis.manoeuvres.length;
@@ -542,7 +550,12 @@ router.post("/analysis/manoeuvre-detection", requireApiKey, async (req, res) => 
             console.log("Force sync requested for manoeuvre detection...");
             try {
                 const incomingBatch = await fetchSatelliteCatalog();
-                const existingRows = await Satellite.findAll();
+                const [satellites, debris, rocketBodies] = await Promise.all([
+                    Satellite.findAll(),
+                    Debris.findAll(),
+                    RocketBody.findAll()
+                ]);
+                const existingRows = [...satellites, ...debris, ...rocketBodies];
 
                 const previousSatellites = existingRows.map((row) => serializeSatellite(row));
                 const incomingSatellites = incomingBatch.map((row) => ({
