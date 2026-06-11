@@ -117,6 +117,7 @@ export default {
                 const visibleUcts = payload.filter(u => {
                     if (u.name && /^TEST\b/i.test(u.name)) return false;
                     if (appState.hideCommercialSatellites && isCommercialSatelliteName(u.name)) return false;
+                    if (u.objectType === "Debris" || u.objectType === "Rocket Body") return false;
                     return true;
                 });
 
@@ -164,6 +165,7 @@ export default {
                 const visible = payload.filter(s => {
                     if (s.name && /^TEST\b/i.test(s.name)) return false;
                     if (appState.hideCommercialSatellites && isCommercialSatelliteName(s.name)) return false;
+                    if (s.objectType === "Debris" || s.objectType === "Rocket Body") return false;
                     return true;
                 });
 

@@ -139,7 +139,11 @@ export function renderVolumetricScanAnalysis(result, passes) {
         const filter = activeBtn ? activeBtn.dataset.filter : "all";
         const query = (searchInput?.value || "").toUpperCase().trim();
 
-        let filtered = passes;
+        let filtered = passes.filter(p => {
+            const meta = appState.satelliteMetaMap.get(p.id);
+            const type = meta?.objectType || "Payload";
+            return type !== "Debris" && type !== "Rocket Body";
+        });
         if (query) {
             filtered = filtered.filter(p =>
                 p.id.toUpperCase().includes(query) ||
@@ -206,8 +210,15 @@ export function renderVolumetricScanAnalysis(result, passes) {
 export function renderCollisionDetectionAnalysis(result) {
     if (!elements.analysisPanel) return;
     const thresholdLabel = result.proximityThresholdKm || result.conjunctionThresholdKm || 25;
-    const conjunctions = (Array.isArray(result.conjunctions) ? result.conjunctions : [])
-        .filter(c => c.primaryIsIndian || c.secondaryIsIndian);
+    let conjunctions = (Array.isArray(result.conjunctions) ? result.conjunctions : [])
+        .filter(c => c.primaryIsIndian || c.secondaryIsIndian)
+        .filter(c => {
+            const pMeta = appState.satelliteMetaMap.get(c.primaryId);
+            const sMeta = appState.satelliteMetaMap.get(c.secondaryId);
+            const pType = pMeta?.objectType || "Payload";
+            const sType = sMeta?.objectType || "Payload";
+            return pType !== "Debris" && pType !== "Rocket Body" && sType !== "Debris" && sType !== "Rocket Body";
+        });
 
     const conjunctionItems = conjunctions.slice(0, 15).map((conj, idx) => {
         const pcFormatted = conj.collisionProbability < 1e-7 ? " < 1e-7" : conj.collisionProbability.toExponential(2);
@@ -261,8 +272,20 @@ export function renderCollisionDetectionAnalysis(result) {
 // ---------------------------------------------------------------------------
 export function renderConjunctionAnalysis(result) {
     if (!elements.analysisPanel) return;
-    const conjunctions = Array.isArray(result.conjunctions) ? result.conjunctions : [];
-    const summary = result.summary || { critical: 0, high: 0, medium: 0, total: 0 };
+    let conjunctions = (Array.isArray(result.conjunctions) ? result.conjunctions : [])
+        .filter(c => {
+            const pMeta = appState.satelliteMetaMap.get(c.primaryId);
+            const sMeta = appState.satelliteMetaMap.get(c.secondaryId);
+            const pType = pMeta?.objectType || "Payload";
+            const sType = sMeta?.objectType || "Payload";
+            return pType !== "Debris" && pType !== "Rocket Body" && sType !== "Debris" && sType !== "Rocket Body";
+        });
+    const summary = {
+        critical: conjunctions.filter(c => c.severity === "critical").length,
+        high: conjunctions.filter(c => c.severity === "high").length,
+        medium: conjunctions.filter(c => c.severity === "medium").length,
+        total: conjunctions.length
+    };
     const forecastMinutes = result.horizonMinutes || result.forecastWindowMinutes || 0;
     const thresholdLabel = result.proximityThresholdKm || result.conjunctionThresholdKm || 25;
 
@@ -358,7 +381,13 @@ export function renderAreaAnalysis(result) {
     }
 
     // Fallback: generic proximity analysis
-    const alerts = getAreaAlerts(result);
+    let alerts = getAreaAlerts(result).filter(c => {
+        const pMeta = appState.satelliteMetaMap.get(c.primaryId);
+        const sMeta = c.secondaryId ? appState.satelliteMetaMap.get(c.secondaryId) : null;
+        const pType = pMeta?.objectType || "Payload";
+        const sType = sMeta?.objectType || "Payload";
+        return pType !== "Debris" && pType !== "Rocket Body" && sType !== "Debris" && sType !== "Rocket Body";
+    });
     const thresholdLabel = result.proximityThresholdKm || result.conjunctionThresholdKm || result.visibilityThresholdDeg || 25;
     const forecastMinutes = result.horizonMinutes || result.forecastWindowMinutes || 0;
     const minAltitude = result.minAltitudeKm ?? 0;
@@ -366,7 +395,13 @@ export function renderAreaAnalysis(result) {
     const criticalAlerts = alerts.filter(a => a.severity === "critical");
     const centroid = (result.region || result.area).centroid;
 
-    const passItems = passes.slice(0, 6).map(pass => `
+    const filteredPasses = passes.filter(p => {
+        const meta = appState.satelliteMetaMap.get(p.id);
+        const type = meta?.objectType || "Payload";
+        return type !== "Debris" && type !== "Rocket Body";
+    });
+
+    const passItems = filteredPasses.slice(0, 6).map(pass => `
         <strong>${escapeHtml(pass.id)}${pass.isIndian ? " [IND]" : ""}</strong> Starts ${formatDateTime(pass.startTime)}<br>
         Closest approach: ${formatNumber(pass.closestApproachKm, 0)} km<br>
         Peak altitude: ${formatNumber(pass.peakAltitudeKm ?? pass.maxAltitudeKm ?? 0, 0)} km
@@ -387,7 +422,7 @@ export function renderAreaAnalysis(result) {
             <div class="metric-card"><div class="label">Proximity</div><div class="value">${thresholdLabel} km</div></div>
             <div class="metric-card"><div class="label">Forecast</div><div class="value">${forecastMinutes}m</div></div>
             <div class="metric-card"><div class="label">Findings</div><div class="value">${criticalAlerts.length}</div></div>
-            <div class="metric-card"><div class="label">Region Passes</div><div class="value">${passes.length}</div></div>
+            <div class="metric-card"><div class="label">Region Passes</div><div class="value">${filteredPasses.length}</div></div>
             <div class="metric-card"><div class="label">Altitude Window</div><div class="value">${formatNumber(minAltitude, 0)}-${formatNumber(maxAltitude, 0)} km</div></div>
         </div>
 
@@ -403,7 +438,7 @@ export function renderAreaAnalysis(result) {
 
         <div class="section">
             <div class="section-title">Indian Satellite Activity</div>
-            <div class="micro-card">${passes.filter(pass => pass.isIndian).length} Indian-satellite passes are predicted in this forecast window</div>
+            <div class="micro-card">${filteredPasses.filter(pass => pass.isIndian).length} Indian-satellite passes are predicted in this forecast window</div>
         </div>
     `;
 }

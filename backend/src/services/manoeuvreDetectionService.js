@@ -170,7 +170,7 @@ function yieldToEventLoop() {
     return new Promise(resolve => setImmediate(resolve));
 }
 
-async function finalizeProximityDraft(draft, incomingCatalog, referenceDate, thresholds) {
+async function finalizeProximityDraft(draft, incomingCatalog, referenceDate, thresholds, precomputedIndianAssets = null) {
     if (!draft) {
         return null;
     }
@@ -194,32 +194,95 @@ async function finalizeProximityDraft(draft, incomingCatalog, referenceDate, thr
         return null;
     }
 
+    let indianList = precomputedIndianAssets;
+    if (!indianList && Array.isArray(incomingCatalog)) {
+        indianList = [];
+        for (const candidate of incomingCatalog) {
+            if (!candidate || candidate.name === draft.incoming.name) {
+                continue;
+            }
+            if (!isIndianSatelliteName(candidate.name)) {
+                continue;
+            }
+            const record = createPropagationRecord({
+                name: candidate.name,
+                line1: candidate.line1,
+                line2: candidate.line2,
+                noradId: candidate.noradId,
+                isIndian: true
+            });
+            if (record) {
+                indianList.push({
+                    name: candidate.name,
+                    noradId: candidate.noradId,
+                    record
+                });
+            }
+        }
+    }
+
+    if (!indianList || indianList.length === 0) {
+        return {
+            ...draft,
+            proximityThreat: false,
+            minDistanceBeforeKm: null,
+            minDistanceAfterKm: null,
+            nearestIndianId: null,
+            nearestIndianNoradId: null
+        };
+    }
+
     let bestIndianId = null;
     let bestIndianNoradId = null;
     let bestMinNew = Infinity;
     let bestMinOld = Infinity;
 
-    for (const candidate of incomingCatalog) {
-        if (!candidate || candidate.name === draft.incoming.name) {
-            continue;
-        }
-        if (!isIndianSatelliteName(candidate.name)) {
+    const horizonSeconds = Math.max(60, thresholds.proximityHorizonMinutes * 60);
+    const startMs = referenceDate.getTime();
+
+    // Pre-propagate primary (draft) satellite state for old and new orbits over the entire horizon
+    const oldStates = [];
+    const newStates = [];
+    const steps = [];
+
+    for (let offsetSeconds = 0; offsetSeconds <= horizonSeconds; offsetSeconds += ANALYSIS_STEP_SECONDS) {
+        const sampleDate = new Date(startMs + offsetSeconds * 1000);
+        steps.push(sampleDate);
+        oldStates.push(propagateState(recordOld, sampleDate, null));
+        newStates.push(propagateState(recordNew, sampleDate, null));
+    }
+
+    for (const indian of indianList) {
+        if (indian.name === draft.incoming.name) {
             continue;
         }
 
-        const indianRecord = createPropagationRecords([candidate])[0];
-        if (!indianRecord) {
-            continue;
-        }
+        let minOld = Infinity;
+        let minNew = Infinity;
 
-        const minOld = minSeparationOverHorizon(recordOld, indianRecord, referenceDate, thresholds.proximityHorizonMinutes);
-        const minNew = minSeparationOverHorizon(recordNew, indianRecord, referenceDate, thresholds.proximityHorizonMinutes);
+        for (let idx = 0; idx < steps.length; idx++) {
+            const sampleDate = steps[idx];
+            const indianState = propagateState(indian.record, sampleDate, null);
+            if (!indianState) continue;
+
+            const oldState = oldStates[idx];
+            if (oldState) {
+                const distOld = distanceBetweenEci(oldState.eci, indianState.eci);
+                if (distOld < minOld) minOld = distOld;
+            }
+
+            const newState = newStates[idx];
+            if (newState) {
+                const distNew = distanceBetweenEci(newState.eci, indianState.eci);
+                if (distNew < minNew) minNew = distNew;
+            }
+        }
 
         if (minNew < bestMinNew) {
             bestMinNew = minNew;
             bestMinOld = minOld;
-            bestIndianId = candidate.name;
-            bestIndianNoradId = candidate.noradId || null;
+            bestIndianId = indian.name;
+            bestIndianNoradId = indian.noradId || null;
         }
     }
 
@@ -362,6 +425,26 @@ async function evaluateCatalogManoeuvres({ previousSatellites = [], incomingSate
     const previousMap = buildPreviousMap(previousSatellites);
     const findings = [];
 
+    const precomputedIndianAssets = [];
+    for (const sat of incomingSatellites) {
+        if (sat && isIndianSatelliteName(sat.name)) {
+            const record = createPropagationRecord({
+                name: sat.name,
+                line1: sat.line1,
+                line2: sat.line2,
+                noradId: sat.noradId,
+                isIndian: true
+            });
+            if (record) {
+                precomputedIndianAssets.push({
+                    name: sat.name,
+                    noradId: sat.noradId,
+                    record
+                });
+            }
+        }
+    }
+
     let processedCount = 0;
     for (const incoming of incomingSatellites) {
         processedCount++;
@@ -383,7 +466,7 @@ async function evaluateCatalogManoeuvres({ previousSatellites = [], incomingSate
         // Routine TLE updates (drift) don't need millions of propagation steps against Indian assets.
         let finalized;
         if (draft.significant) {
-            finalized = await finalizeProximityDraft(draft, incomingSatellites, referenceDate, thresholds);
+            finalized = await finalizeProximityDraft(draft, incomingSatellites, referenceDate, thresholds, precomputedIndianAssets);
         } else {
             finalized = {
                 ...draft,

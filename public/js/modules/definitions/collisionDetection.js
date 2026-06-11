@@ -151,8 +151,15 @@ function runCollisionDetection(ctx) {
 
         // Operational Visualization: Auto-draw red alert markers for high-risk events
         clearCollisionMarkers(ctx.shared.viewer);
-        const criticalAlerts = (response.result.conjunctions || [])
-            .filter(c => c.severity === "critical" || c.collisionProbability > 1e-4);
+        let criticalAlerts = (response.result.conjunctions || [])
+            .filter(c => c.severity === "critical" || c.collisionProbability > 1e-4)
+            .filter(c => {
+                const pMeta = appState.satelliteMetaMap.get(c.primaryId);
+                const sMeta = appState.satelliteMetaMap.get(c.secondaryId);
+                const pType = pMeta?.objectType || "Payload";
+                const sType = sMeta?.objectType || "Payload";
+                return pType !== "Debris" && pType !== "Rocket Body" && sType !== "Debris" && sType !== "Rocket Body";
+            });
         
         if (criticalAlerts.length > 0) {
             drawCollisionRiskMarkers(ctx.shared.viewer, criticalAlerts);

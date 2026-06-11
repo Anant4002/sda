@@ -119,7 +119,25 @@ const SatelliteTleRevision = sequelize.define("SatelliteTleRevision", {
     tableName: "satellite_tle_revisions",
     timestamps: true,
     createdAt: false,
-    updatedAt: false
+    updatedAt: false,
+    indexes: [
+        {
+            name: "satellite_tle_revisions_norad_id_ingested_at",
+            fields: ["norad_id", "ingested_at"]
+        },
+        {
+            name: "satellite_tle_revisions_tle_checksum",
+            fields: ["tle_checksum"]
+        },
+        {
+            name: "satellite_tle_revisions_satellite_name",
+            fields: ["satellite_name"]
+        },
+        {
+            name: "satellite_tle_revisions_perigee_km_ingested_at",
+            fields: ["perigee_km", "ingested_at"]
+        }
+    ]
 });
 
 module.exports = {

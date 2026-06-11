@@ -345,6 +345,16 @@ export function renderSatelliteDirectory(toggleSatellitePath, hideGroup, clearHi
 
     let satellites = appState.satellites;
 
+    if (!appState.showPayloads) {
+        satellites = satellites.filter((s) => s.objectType && s.objectType !== "Payload");
+    }
+    if (!appState.showDebris) {
+        satellites = satellites.filter((s) => s.objectType !== "Debris");
+    }
+    if (!appState.showRocketBodies) {
+        satellites = satellites.filter((s) => s.objectType !== "Rocket Body");
+    }
+
     if (appState.hideCommercialSatellites) {
         satellites = satellites.filter((satellite) => !isCommercialSatelliteName(satellite.name));
     }
@@ -487,7 +497,13 @@ export function renderNeighbourhoodWatchAnalysis(result) {
     }
 
     const scopeText = result.isGlobal ? "All Indian Assets" : result.primaryId;
-    const passes = result.alerts || [];
+    const passes = (result.alerts || []).filter(a => {
+        const pMeta = appState.satelliteMetaMap.get(a.primaryId);
+        const sMeta = appState.satelliteMetaMap.get(a.secondaryId);
+        const pType = pMeta?.objectType || "Payload";
+        const sType = sMeta?.objectType || "Payload";
+        return pType !== "Debris" && pType !== "Rocket Body" && sType !== "Debris" && sType !== "Rocket Body";
+    });
 
     const renderFilteredList = () => {
         const severitySelect = document.getElementById("watchSeverityFilter");
@@ -710,7 +726,12 @@ export function renderManoeuvreAnalysis(result) {
 
 export function renderRegionalAccessAnalysis(result) {
     if (!elements.analysisPanel || !result) return;
-    const findings = Array.isArray(result.findings) ? result.findings : [];
+    let findings = (Array.isArray(result.findings) ? result.findings : [])
+        .filter(f => {
+            const meta = appState.satelliteMetaMap.get(f.satelliteName);
+            const type = meta?.objectType || "Payload";
+            return type !== "Debris" && type !== "Rocket Body";
+        });
     const summary = result.summary || {};
     const debugMetrics = result.debugMetrics || {};
 

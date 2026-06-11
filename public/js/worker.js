@@ -86,7 +86,7 @@ function buildSatellitePath(satelliteId, startTime, noradId = null) {
     if (record.objectType === "Debris") {
         pathColor = "#ff4d4d";
     } else if (record.objectType === "Rocket Body") {
-        pathColor = "#a2d2ff";
+        pathColor = "#d880ff";
     }
 
     return [{

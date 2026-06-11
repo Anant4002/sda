@@ -235,6 +235,11 @@ async function refreshCatalogSidebar() {
         catalogHistorySnapshot = historyRes.history;
         renderCatalogStatus(catalogStatusSnapshot, catalogHistorySnapshot);
         eventBus.emit(events.catalogStatusUpdated, { status: catalogStatusSnapshot, history: catalogHistorySnapshot });
+
+        // Dynamic polling: if currently syncing, check again in 5 seconds to update the UI status promptly
+        if (catalogStatusSnapshot?.scheduler?.status === "SYNCING") {
+            setTimeout(refreshCatalogSidebar, 5000);
+        }
     } catch (error) {
         console.warn("Failed to refresh catalog sidebar:", error);
     }
@@ -675,7 +680,7 @@ async function initializeApplication() {
                         } else if (typeLabel === "Debris") {
                             typeLabel = '<span style="color: #ff4d4d;">Debris</span>';
                         } else if (typeLabel === "Rocket Body") {
-                            typeLabel = '<span style="color: #a2d2ff;">Rocket Body</span>';
+                            typeLabel = '<span style="color: #d880ff;">Rocket Body</span>';
                         }
 
                         elements.hoverPanel.innerHTML = `

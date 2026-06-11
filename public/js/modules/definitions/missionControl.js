@@ -98,7 +98,30 @@ function buildSidebar() {
             </div>
         </div>
 
-        <!-- 4. Priority Groups -->
+        <!-- 4. Legend -->
+        <div class="section" id="opLegendSection">
+            <div class="section-title">Satellite Legend</div>
+            <div class="legend" style="padding: 10px; background: rgba(0,0,0,0.25); border-radius: 8px; border: 1px solid var(--panel-border); display: flex; flex-direction: column; gap: 8px;">
+                <div class="legend-row" style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-main);">
+                    <span class="legend-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background:#7cf29a; box-shadow: 0 0 6px #7cf29a;"></span>
+                    Active Satellites (Green)
+                </div>
+                <div class="legend-row" style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-main);">
+                    <span class="legend-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background:#ff9933; box-shadow: 0 0 6px #ff9933;"></span>
+                    Indian Satellites (Orange)
+                </div>
+                <div class="legend-row" style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-main);">
+                    <span class="legend-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background:#ff4d4d; box-shadow: 0 0 6px #ff4d4d;"></span>
+                    Space Debris (Red)
+                </div>
+                <div class="legend-row" style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-main);">
+                    <span class="legend-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background:#d880ff; box-shadow: 0 0 6px #d880ff;"></span>
+                    Rocket Bodies (Vibrant Purple)
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. Priority Groups -->
         <div class="section" id="opPriorityGroupsSection">
             <div class="section-title">Priority Groups</div>
             <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;">
@@ -159,26 +182,6 @@ function buildSidebar() {
 
                 <div style="font-size: 11px; text-transform: uppercase; color: var(--text-dim); margin-top: 6px;">Sync History</div>
                 <div id="catalogHistoryList" class="list" style="max-height: 120px; overflow-y: auto;"></div>
-
-                <div style="font-size: 11px; text-transform: uppercase; color: var(--text-dim); margin-top: 6px;">Legend</div>
-                <div class="legend" style="padding: 6px; background: rgba(0,0,0,0.2); border-radius: 4px;">
-                    <div class="legend-row" style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-main);">
-                        <span class="legend-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background:#7cf29a;"></span>
-                        Active satellites (Payloads)
-                    </div>
-                    <div class="legend-row" style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-main); margin-top: 4px;">
-                        <span class="legend-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background:#ff9933;"></span>
-                        Indian satellites (Payloads)
-                    </div>
-                    <div class="legend-row" style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-main); margin-top: 4px;">
-                        <span class="legend-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background:#ff4d4d;"></span>
-                        Space Debris
-                    </div>
-                    <div class="legend-row" style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-main); margin-top: 4px;">
-                        <span class="legend-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background:#a2d2ff;"></span>
-                        Rocket Bodies
-                    </div>
-                </div>
             </div>
         </details>
     `;

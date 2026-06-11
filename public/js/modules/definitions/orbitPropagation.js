@@ -74,6 +74,29 @@ function buildSidebar() {
             </div>
         </div>
 
+        <!-- Satellite Legend -->
+        <div class="section" id="orbitLegendSection">
+            <div class="section-title">Satellite Legend</div>
+            <div class="legend" style="padding: 10px; background: rgba(0,0,0,0.25); border-radius: 8px; border: 1px solid var(--panel-border); display: flex; flex-direction: column; gap: 8px;">
+                <div class="legend-row" style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-main);">
+                    <span class="legend-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background:#7cf29a; box-shadow: 0 0 6px #7cf29a;"></span>
+                    Active Satellites (Green)
+                </div>
+                <div class="legend-row" style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-main);">
+                    <span class="legend-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background:#ff9933; box-shadow: 0 0 6px #ff9933;"></span>
+                    Indian Satellites (Orange)
+                </div>
+                <div class="legend-row" style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-main);">
+                    <span class="legend-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background:#ff4d4d; box-shadow: 0 0 6px #ff4d4d;"></span>
+                    Space Debris (Red)
+                </div>
+                <div class="legend-row" style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-main);">
+                    <span class="legend-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background:#d880ff; box-shadow: 0 0 6px #d880ff;"></span>
+                    Rocket Bodies (Vibrant Purple)
+                </div>
+            </div>
+        </div>
+
         <div class="section">
             <div class="section-title">Active Selection</div>
             <div id="orbitActiveSelection" class="micro-card">No orbit currently rendered.</div>
@@ -132,6 +155,16 @@ export default {
                     s.name.toUpperCase().includes(query) ||
                     (s.noradId && String(s.noradId).includes(query))
                 );
+
+                if (!appState.showPayloads) {
+                    filtered = filtered.filter(s => s.objectType && s.objectType !== "Payload");
+                }
+                if (!appState.showDebris) {
+                    filtered = filtered.filter(s => s.objectType !== "Debris");
+                }
+                if (!appState.showRocketBodies) {
+                    filtered = filtered.filter(s => s.objectType !== "Rocket Body");
+                }
 
                 if (appState.orbitCountryFilter !== "all") {
                     filtered = filtered.filter(s => {

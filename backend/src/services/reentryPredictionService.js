@@ -299,10 +299,23 @@ const { Op } = require("sequelize");
 async function evaluateReentryRisks(options = {}) {
     const { transaction = null } = options;
     
-    // Find satellites with low perigee (< 300km) from the latest revisions
+    // Get all active payload NORAD IDs from the Satellite table.
+    // Debris and Rocket Bodies must be strictly excluded from all analysis modules per requirements.
+    const activePayloads = await Satellite.findAll({
+        attributes: ["noradId"],
+        transaction
+    });
+    const payloadNoradIds = activePayloads.map(s => s.noradId).filter(id => id !== null);
+
+    if (payloadNoradIds.length === 0) {
+        return [];
+    }
+
+    // Find ONLY active payload satellites with low perigee (< 300km) from the latest revisions
     const decayingCandidates = await SatelliteTleRevision.findAll({
         attributes: ["satelliteName", "noradId", "perigeeKm"],
         where: {
+            noradId: { [Op.in]: payloadNoradIds },
             perigeeKm: { [Op.lt]: 300 },
             ingestedAt: {
                 [Op.gte]: new Date(Date.now() - 24 * 60 * 60 * 1000) // Within last 24h
@@ -312,7 +325,7 @@ async function evaluateReentryRisks(options = {}) {
         transaction
     });
 
-    console.log(`Evaluating re-entry risks for ${decayingCandidates.length} candidates...`);
+    console.log(`Evaluating re-entry risks for ${decayingCandidates.length} active payload candidates...`);
 
     const results = [];
     for (const candidate of decayingCandidates) {
@@ -322,6 +335,8 @@ async function evaluateReentryRisks(options = {}) {
         } catch (error) {
             console.error(`Failed to predict re-entry for ${candidate.satelliteName}:`, error);
         }
+        // Yield control to allow HTTP requests and database queries to execute
+        await new Promise(resolve => setImmediate(resolve));
     }
 
     return results;

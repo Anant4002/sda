@@ -160,6 +160,10 @@ function getFilteredSatrecs() {
             }
         }
         if (match) {
+            // Always exclude Debris and Rocket Bodies from Blind Spot Detection coverage calculation
+            if (sat.objectType === "Debris" || sat.objectType === "Rocket Body") {
+                continue;
+            }
             try {
                 const satrec = window.satellite.twoline2satrec(sat.line1, sat.line2);
                 if (!Number.isNaN(satrec?.satnum)) {

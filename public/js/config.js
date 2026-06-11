@@ -2,7 +2,7 @@ export const COLORS = {
     otherSatellite: "#7cf29a",
     indianSatellite: "#ff9933",
     debris: "#ff4d4d",
-    rocketBody: "#a2d2ff",
+    rocketBody: "#d880ff",
     areaFill: "#6fe2ff",
     areaOutline: "#6fe2ff",
     indiaBoundary: "#420000"

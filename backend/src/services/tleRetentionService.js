@@ -39,42 +39,37 @@ async function purgeStaleTleRevisions(retentionDays) {
     });
 
     try {
-        // Step 1: Find the IDs of the 2 most recent revisions per NORAD ID.
-        // These are always protected regardless of age.
-        const protectedRows = await sequelize.query(
-            `SELECT id FROM (
-                SELECT id,
-                       ROW_NUMBER() OVER (PARTITION BY norad_id ORDER BY ingested_at DESC) AS rn
-                FROM satellite_tle_revisions
-                WHERE norad_id IS NOT NULL
-            ) ranked
-            WHERE rn <= 2`,
-            { type: QueryTypes.SELECT }
+        // Delete rows older than the cutoff that are NOT in the 2 most recent revisions per NORAD ID.
+        // Doing this in a single query with RETURNING avoids fetching and sending back tens of thousands of IDs.
+        const deletedRows = await sequelize.query(
+            `DELETE FROM satellite_tle_revisions
+             WHERE ingested_at < :cutoffDate
+               AND id NOT IN (
+                   SELECT id FROM (
+                       SELECT id,
+                              ROW_NUMBER() OVER (PARTITION BY norad_id ORDER BY ingested_at DESC) AS rn
+                       FROM satellite_tle_revisions
+                       WHERE norad_id IS NOT NULL
+                   ) ranked
+                   WHERE rn <= 2
+               )
+             RETURNING id`,
+            {
+                replacements: { cutoffDate },
+                type: QueryTypes.SELECT
+            }
         );
 
-        const protectedIds = protectedRows.map(r => r.id);
-
-        // Step 2: Delete rows older than the cutoff that are NOT in the protected set.
-        const whereClause = {
-            ingestedAt: { [Op.lt]: cutoffDate }
-        };
-
-        if (protectedIds.length > 0) {
-            whereClause.id = { [Op.notIn]: protectedIds };
-        }
-
-        const deleted = await SatelliteTleRevision.destroy({ where: whereClause });
+        const deleted = deletedRows.length;
 
         logger.info(CONTEXT, `TLE revision purge complete`, {
             deleted,
-            protectedFromPurge: protectedIds.length,
             retentionDays: days,
             cutoffDate: cutoffDate.toISOString()
         });
 
         return {
             deleted,
-            protectedFromPurge: protectedIds.length,
             retentionDays: days,
             cutoffDate: cutoffDate.toISOString()
         };
