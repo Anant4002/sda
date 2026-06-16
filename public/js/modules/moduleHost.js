@@ -112,8 +112,10 @@ export const moduleHost = {
             shared.viewer.clock.shouldAnimate = true;
         }
         
-        // 4. Clear any persistent module state in appState via shared accessors if needed
-        // (Handled primarily by exitFocusedAnalysisMode)
+        // 5. Refresh satellite visibility to respect current filter state across all modules
+        if (typeof shared.refreshSatelliteVisibility === "function") {
+            shared.refreshSatelliteVisibility();
+        }
     },
 
     renderPlaceholder(definition) {

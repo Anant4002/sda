@@ -258,35 +258,36 @@ router.get("/catalog/status", requireApiKey, async (req, res) => {
 
 router.get("/catalog/latest-new-satellites", requireApiKey, async (req, res) => {
     try {
-        const { CatalogSyncRun } = require("../models/catalogSyncRun");
-        const { CatalogSyncNewSatellite } = require("../models/catalogSyncNewSatellite");
+        const { Op } = require("sequelize");
         const { Satellite } = require("../models/satellite");
-
-        // Find the most recent sync run
-        const latestSyncRun = await CatalogSyncRun.findOne({
-            order: [["completedAt", "DESC"]]
-        });
-
-        if (!latestSyncRun) {
-            return res.json({ satellites: [] });
-        }
-
-        // Fetch all CatalogSyncNewSatellite rows for that run
-        const newSats = await CatalogSyncNewSatellite.findAll({
-            where: { syncRunId: latestSyncRun.id }
-        });
-
-        if (newSats.length === 0) {
-            return res.json({ satellites: [] });
-        }
-
-        const noradIds = newSats.map(ns => ns.noradId);
+        const { Debris } = require("../models/debris");
+        const { RocketBody } = require("../models/rocketBody");
         const { serializeSatellite } = require("../services/satelliteMetadataService");
 
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
         const [satellites, debris, rocketBodies] = await Promise.all([
-            Satellite.findAll({ where: { noradId: noradIds } }),
-            Debris.findAll({ where: { noradId: noradIds } }),
-            RocketBody.findAll({ where: { noradId: noradIds } })
+            Satellite.findAll({
+                where: {
+                    firstAddedAt: {
+                        [Op.gte]: thirtyDaysAgo
+                    }
+                }
+            }),
+            Debris.findAll({
+                where: {
+                    firstAddedAt: {
+                        [Op.gte]: thirtyDaysAgo
+                    }
+                }
+            }),
+            RocketBody.findAll({
+                where: {
+                    firstAddedAt: {
+                        [Op.gte]: thirtyDaysAgo
+                    }
+                }
+            })
         ]);
 
         const allObjects = [...satellites, ...debris, ...rocketBodies];

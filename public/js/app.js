@@ -124,101 +124,105 @@ function hideSatelliteGroup(label) {
     refreshSatelliteVisibility();
 }
 
+function shouldShowSatellite(satellite) {
+    const groupLabel = deriveSatelliteGroupLabel(satellite.name);
+    const isGroupHidden = appState.hiddenGroupLabels.has(groupLabel);
+    const isCommercialHidden = appState.hideCommercialSatellites && isCommercialSatelliteName(satellite.name);
+    
+    if (isGroupHidden || isCommercialHidden) {
+        return false;
+    }
+
+    const isPayload = satellite.objectType === "Payload" || !satellite.objectType;
+    const isDebris = satellite.objectType === "Debris";
+    const isRocketBody = satellite.objectType === "Rocket Body";
+
+    if (isPayload && !appState.showPayloads) {
+        return false;
+    }
+    if (isDebris && !appState.showDebris) {
+        return false;
+    }
+    if (isRocketBody && !appState.showRocketBodies) {
+        return false;
+    }
+
+    // Mission Control - Added in Last 30 Days filter
+    if (appState.addedLast30Days) {
+        const addedTime = satellite.firstAddedAt ? new Date(satellite.firstAddedAt).getTime() : 0;
+        const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+        if (addedTime < thirtyDaysAgo) {
+            return false;
+        }
+    }
+
+    // Mission Control - Newly Detected Objects filter
+    if (appState.showOnlyNewSyncSatellites) {
+        if (!appState.latestNewSatelliteNames || !appState.latestNewSatelliteNames.has(satellite.name)) {
+            return false;
+        }
+    }
+
+    // Mission Control - Only Indian Satellites filter
+    if (appState.showOnlyIndian && !satellite.isIndian) {
+        return false;
+    }
+
+    // Mission Control - Only Threat Objects filter
+    if (appState.showOnlyThreats) {
+        const name = String(satellite.name || "").toUpperCase();
+        const isThreat = ["YAOGAN", "FENGYUN", "SJ-", "SHIYAN", "BEIDOU"].some(p => name.includes(p));
+        if (!isThreat) {
+            return false;
+        }
+    }
+
+    // Mission Control - Orbit Class filters
+    if (appState.orbitClassFilter) {
+        const orbitClass = satellite.characterisation?.orbitClass || "Unknown";
+        if (appState.orbitClassFilter[orbitClass] === false) {
+            return false;
+        }
+    }
+
+    // Orbit Propagation - Country Filters
+    if (appState.orbitCountryFilter && appState.orbitCountryFilter !== "all") {
+        const satName = satellite.name.toUpperCase();
+        if (appState.orbitCountryFilter === "indian") {
+            if (!satellite.isIndian) return false;
+        } else if (appState.orbitCountryFilter === "friendly") {
+            const friendlyList = appState.friendlySatellites || [];
+            const isFriendly = friendlyList.some(p => satName.includes(p.toUpperCase().trim()));
+            if (!isFriendly) return false;
+        } else if (appState.orbitCountryFilter === "adversary") {
+            const adversaryList = appState.adversarySatellites || [];
+            const isAdversary = adversaryList.some(p => satName.includes(p.toUpperCase().trim()));
+            if (!isAdversary) return false;
+        }
+    }
+
+    // Volumetric Scan - Noise Reduction filter
+    if (appState.volumetricScanActive && appState.volumetricRelevantSats) {
+        if (!appState.volumetricRelevantSats.has(satellite.name)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 function refreshSatelliteVisibility() {
     for (const satellite of appState.satellites) {
         const point = appState.pointMap.get(satellite.name);
-        if (!point) {
-            continue;
+        if (point) {
+            point.show = shouldShowSatellite(satellite);
         }
-
-        const groupLabel = deriveSatelliteGroupLabel(satellite.name);
-        const isGroupHidden = appState.hiddenGroupLabels.has(groupLabel);
-        const isCommercialHidden = appState.hideCommercialSatellites && isCommercialSatelliteName(satellite.name);
-        
-        let show = !isGroupHidden && !isCommercialHidden;
-
-        const isPayload = satellite.objectType === "Payload" || !satellite.objectType;
-        const isDebris = satellite.objectType === "Debris";
-        const isRocketBody = satellite.objectType === "Rocket Body";
-
-        if (show && isPayload && !appState.showPayloads) {
-            show = false;
-        }
-        if (show && isDebris && !appState.showDebris) {
-            show = false;
-        }
-        if (show && isRocketBody && !appState.showRocketBodies) {
-            show = false;
-        }
-
-        // Mission Control - Added in Last 30 Days filter
-        if (show && appState.addedLast30Days) {
-            const addedTime = satellite.firstAddedAt ? new Date(satellite.firstAddedAt).getTime() : 0;
-            const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-            if (addedTime < thirtyDaysAgo) {
-                show = false;
-            }
-        }
-
-        // Mission Control - Newly Detected Objects filter
-        if (show && appState.showOnlyNewSyncSatellites) {
-            if (appState.latestNewSatelliteNames && appState.latestNewSatelliteNames.has(satellite.name)) {
-                // Keep visible
-            } else {
-                show = false;
-            }
-        }
-
-        // Mission Control - Only Indian Satellites filter
-        if (show && appState.showOnlyIndian && !satellite.isIndian) {
-            show = false;
-        }
-
-        // Mission Control - Only Threat Objects filter
-        if (show && appState.showOnlyThreats) {
-            const name = String(satellite.name || "").toUpperCase();
-            const isThreat = ["YAOGAN", "FENGYUN", "SJ-", "SHIYAN", "BEIDOU"].some(p => name.includes(p));
-            if (!isThreat) {
-                show = false;
-            }
-        }
-
-        // Mission Control - Orbit Class filters
-        if (show && appState.orbitClassFilter) {
-            const orbitClass = satellite.characterisation?.orbitClass || "Unknown";
-            if (appState.orbitClassFilter[orbitClass] === false) {
-                show = false;
-            }
-        }
-
-        // Orbit Propagation - Country Filters
-        if (show && appState.orbitCountryFilter && appState.orbitCountryFilter !== "all") {
-            const satName = satellite.name.toUpperCase();
-            if (appState.orbitCountryFilter === "indian") {
-                if (!satellite.isIndian) show = false;
-            } else if (appState.orbitCountryFilter === "friendly") {
-                const friendlyList = appState.friendlySatellites || [];
-                const isFriendly = friendlyList.some(p => satName.includes(p.toUpperCase().trim()));
-                if (!isFriendly) show = false;
-            } else if (appState.orbitCountryFilter === "adversary") {
-                const adversaryList = appState.adversarySatellites || [];
-                const isAdversary = adversaryList.some(p => satName.includes(p.toUpperCase().trim()));
-                if (!isAdversary) show = false;
-            }
-        }
-
-        // Volumetric Scan - Noise Reduction filter
-        if (show && appState.volumetricScanActive && appState.volumetricRelevantSats) {
-            if (!appState.volumetricRelevantSats.has(satellite.name)) {
-                show = false;
-            }
-        }
-
-        point.show = show;
     }
 
     renderSatelliteDirectory(toggleSatellitePath, hideSatelliteGroup, clearHiddenGroups);
 }
+
+window.refreshSatelliteVisibility = refreshSatelliteVisibility;
 
 function clearHiddenGroups() {
     appState.hiddenGroupLabels.clear();
@@ -736,8 +740,6 @@ async function populateSatelliteScene(satellites) {
         const batch = satellites.slice(index, index + SATELLITE_POINT_BATCH_SIZE);
         for (const satellite of batch) {
             appState.satelliteMetaMap.set(satellite.name, satellite);
-            const groupLabel = deriveSatelliteGroupLabel(satellite.name);
-            const isHidden = appState.hiddenGroupLabels.has(groupLabel) || (appState.hideCommercialSatellites && isCommercialSatelliteName(satellite.name));
 
             let size = 5;
             let colorStr = COLORS.otherSatellite;
@@ -757,7 +759,7 @@ async function populateSatelliteScene(satellites) {
                 pixelSize: size,
                 color: Cesium.Color.fromCssColorString(colorStr),
                 id: satellite.name,
-                show: !isHidden
+                show: shouldShowSatellite(satellite)
             });
 
             appState.pointMap.set(satellite.name, point);
@@ -798,10 +800,6 @@ async function addNewSatellitesToScene(newSatellites) {
         appState.satelliteMetaMap.set(satellite.name, satellite);
 
         // Create a Cesium point primitive for the satellite
-        const groupLabel = deriveSatelliteGroupLabel(satellite.name);
-        const isHidden = appState.hiddenGroupLabels.has(groupLabel) ||
-            (appState.hideCommercialSatellites && isCommercialSatelliteName(satellite.name));
-
         let size = 5;
         let colorStr = COLORS.otherSatellite;
 
@@ -820,7 +818,7 @@ async function addNewSatellitesToScene(newSatellites) {
             pixelSize: size,
             color: Cesium.Color.fromCssColorString(colorStr),
             id: satellite.name,
-            show: !isHidden
+            show: shouldShowSatellite(satellite)
         });
 
         appState.pointMap.set(satellite.name, point);

@@ -841,22 +841,21 @@ export function exitFocusedAnalysisMode() {
     clearDriftTracks();
 
     // 1. Restore satellite points visibility
-    let restoredPoints = 0;
-    for (let i = 0; i < satellitePoints.length; i++) {
-        const point = satellitePoints.get(i);
-        const groupLabel = deriveSatelliteGroupLabel(point.id);
-        const isGroupHidden = appState.hiddenGroupLabels.has(groupLabel);
-        const isCommercialHidden = appState.hideCommercialSatellites && isCommercialSatelliteName(point.id);
+    if (typeof window.refreshSatelliteVisibility === "function") {
+        window.refreshSatelliteVisibility();
+    } else {
+        for (let i = 0; i < satellitePoints.length; i++) {
+            const point = satellitePoints.get(i);
+            const groupLabel = deriveSatelliteGroupLabel(point.id);
+            const isGroupHidden = appState.hiddenGroupLabels.has(groupLabel);
+            const isCommercialHidden = appState.hideCommercialSatellites && isCommercialSatelliteName(point.id);
 
-        const saved = appState.savedVisibilityState.get(`point:${point.id}`);
-        if (saved !== undefined) {
-            // Restore saved state, but still respect global hidden groups and commercial filter
-            point.show = (isGroupHidden || isCommercialHidden) ? false : saved;
-            if (point.show) restoredPoints++;
-        } else {
-            // Default restore, respecting global filters
-            point.show = !isGroupHidden && !isCommercialHidden;
-            if (point.show) restoredPoints++;
+            const saved = appState.savedVisibilityState.get(`point:${point.id}`);
+            if (saved !== undefined) {
+                point.show = (isGroupHidden || isCommercialHidden) ? false : saved;
+            } else {
+                point.show = !isGroupHidden && !isCommercialHidden;
+            }
         }
     }
 
