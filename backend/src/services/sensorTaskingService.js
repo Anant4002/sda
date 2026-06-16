@@ -17,13 +17,7 @@
 
 const satelliteService = require('./orbitalPropagationService');
 
-// ---------------------------------------------------------------------------
-// SENSOR INVENTORY
-// ---------------------------------------------------------------------------
-// Each entry is a representative ground truth for a tracking sensor category.
-// isRepresentative = true — placeholder for a real sensor node.
-// Replace with live endpoint configuration for production deployment.
-// ---------------------------------------------------------------------------
+// Sensor Inventory
 const SENSOR_INVENTORY = [
     {
         id: 'S-OPT-MNTABU',
@@ -157,9 +151,7 @@ const SENSOR_INVENTORY = [
     }
 ];
 
-// ---------------------------------------------------------------------------
-// CORE PASS PREDICTION (unchanged logic from original, parameterised)
-// ---------------------------------------------------------------------------
+// Core pass prediction
 
 /**
  * Find the next visible pass of a satellite over a given sensor.
@@ -231,9 +223,7 @@ function _findNextPass(record, sensor, now, orbitMinutes) {
     };
 }
 
-// ---------------------------------------------------------------------------
-// PRIORITY SCORING
-// ---------------------------------------------------------------------------
+// Priority scoring
 
 /**
  * Compute a sort score for a recommendation — higher = sooner first.
@@ -251,9 +241,7 @@ function _sortScore(rec, isIndian, threatScore) {
     return pw + indianBonus + threatBonus;
 }
 
-// ---------------------------------------------------------------------------
-// PUBLIC API
-// ---------------------------------------------------------------------------
+// Public API
 
 /**
  * Get sensor tasking recommendations for a satellite (all sensor types).

@@ -18,9 +18,7 @@ const { haversineKm } = require('./orbitalPropagationService');
 const { normalizeSensorTrack, getSensor } = require('./sensorAdapterService');
 const { Op } = require('sequelize');
 
-// ---------------------------------------------------------------------------
-// CONSTANTS
-// ---------------------------------------------------------------------------
+
 
 const INDIA_CENTROID = { lat: 20.5937, lon: 78.9629 };
 const EARTH_RADIUS_KM = 6371.0;
@@ -45,9 +43,7 @@ const PREDICTION_MODES = {
 // In-memory track store (low-latency, no DB round-trip for recent tracks)
 let recentRapidTracks = [];
 
-// ---------------------------------------------------------------------------
-// 1. TRACK FITTING ENGINE — least-squares over all observations
-// ---------------------------------------------------------------------------
+
 
 /**
  * Fit a linear model to the track using least-squares regression.
@@ -129,9 +125,7 @@ function fitTrack(points) {
     return { velocity, acceleration, curvature, altSlope: altSlope.slope, confidence };
 }
 
-// ---------------------------------------------------------------------------
-// 2. STATE SMOOTHING (Exponential)
-// ---------------------------------------------------------------------------
+
 
 /**
  * Apply exponential smoothing to a sequence of track observations.
@@ -183,9 +177,7 @@ function smoothTrackHistory(points) {
     };
 }
 
-// ---------------------------------------------------------------------------
-// 3. THREAT CLASSIFICATION ENGINE — weighted feature scoring
-// ---------------------------------------------------------------------------
+
 
 /**
  * Classify a track using weighted feature scores across multiple dimensions.
@@ -314,9 +306,7 @@ function classifyTrack(fit, smooth) {
     };
 }
 
-// ---------------------------------------------------------------------------
-// 4. TRAJECTORY PREDICTION — physics-aware
-// ---------------------------------------------------------------------------
+
 
 /**
  * Compute a geodetic position along a ballistic arc given initial conditions.
@@ -425,9 +415,7 @@ function predictTrajectory(points, classification, fit) {
     return { mode, path, impactPoint, impactTime };
 }
 
-// ---------------------------------------------------------------------------
-// 5. THREAT ASSESSMENT
-// ---------------------------------------------------------------------------
+
 
 function assessThreat(prediction, classification) {
     if (classification === OBJECT_TYPES.METEOR) {
@@ -457,9 +445,7 @@ function assessThreat(prediction, classification) {
     return { level: 'LOW', message: `${classification} trajectory monitored. No immediate threat to national assets.` };
 }
 
-// ---------------------------------------------------------------------------
-// 6. MAIN INGEST ENTRY POINT
-// ---------------------------------------------------------------------------
+// Main ingest entry point
 
 /**
  * Ingest a sensor track — normalise, fit, classify, predict, alert.
@@ -531,9 +517,7 @@ async function ingestSensorTrack(trackData) {
     return result;
 }
 
-// ---------------------------------------------------------------------------
-// LEGACY / UTILITY FUNCTIONS
-// ---------------------------------------------------------------------------
+// Legacy / utility functions
 
 async function getRapidTracks() {
     return recentRapidTracks;

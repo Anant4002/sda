@@ -7,7 +7,7 @@
  *   - Spectral orbital pattern recognition (sun-synchronous, polar, GEO, MEO, LEO EO)
  *   - Pattern-of-life assessment from TLE revision history
  *
- * IMPORTANT: BSTAR is a drag-related ballistic coefficient proxy — it does NOT
+ * Note: BSTAR is a drag-related ballistic coefficient proxy — it does not
  * directly translate to physical size or mass. Results are labelled accordingly.
  */
 
@@ -19,9 +19,7 @@ const { isIndianSatelliteName } = require('./satelliteOwnershipService');
 
 const EARTH_RADIUS_KM = 6371.0;
 
-// ---------------------------------------------------------------------------
-// SPECTRAL PATTERN TYPES
-// ---------------------------------------------------------------------------
+// Spectral pattern types
 const SPECTRAL_TYPES = {
     SUN_SYNCHRONOUS: 'SUN_SYNCHRONOUS',
     POLAR_ISR: 'POLAR_ISR',
@@ -32,9 +30,7 @@ const SPECTRAL_TYPES = {
     UNKNOWN: 'UNKNOWN'
 };
 
-// ---------------------------------------------------------------------------
-// 1. DRAG-BASED PROXY (BSTAR)
-// ---------------------------------------------------------------------------
+// Drag-based proxy (BSTAR)
 
 /**
  * Parse the BSTAR drag term from TLE Line 1.
@@ -84,9 +80,7 @@ function classifyDragProxy(bstar) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// 2. THREAT TIER ASSESSMENT
-// ---------------------------------------------------------------------------
+// Threat tier assessment
 
 /**
  * Adversary name pattern pool — used to flag elevated ownership risk.
@@ -140,9 +134,7 @@ function assessThreatTier({ ownership, objectType, orbitClass, inclinationDeg, p
     return { threatTier: 'TIER_3', tierRationale: 'Commercial or unclassified payload — routine monitoring.' };
 }
 
-// ---------------------------------------------------------------------------
-// 3. SPECTRAL ORBITAL PATTERN RECOGNITION
-// ---------------------------------------------------------------------------
+// Spectral orbital pattern recognition
 
 /**
  * Recognise the orbital behavioural pattern from orbital mechanics.
@@ -189,9 +181,7 @@ function recogniseSpectralType({ inclinationDeg, meanMotionRevPerDay, eccentrici
     return { spectralType: SPECTRAL_TYPES.UNKNOWN, spectralRationale: 'Orbital pattern not matched to a known type.' };
 }
 
-// ---------------------------------------------------------------------------
-// 4. PATTERN-OF-LIFE ASSESSMENT
-// ---------------------------------------------------------------------------
+// Pattern-of-life assessment
 
 /**
  * Assess orbital stability from TLE revision history.
@@ -246,9 +236,7 @@ function assessPatternOfLife(tleRevisions) {
     };
 }
 
-// ---------------------------------------------------------------------------
-// EXISTING FUNCTIONS (preserved, backward-compatible)
-// ---------------------------------------------------------------------------
+// Existing functions (preserved, backward-compatible)
 
 function getOrbitalState(line2) {
     const metrics = parseTleLine2OrbitalMetrics(line2);

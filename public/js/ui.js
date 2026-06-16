@@ -1,7 +1,5 @@
 
-// ---------------------------------------------------------------------------
-// EXTERNAL IMPORTS (retained for inline functions below)
-// ---------------------------------------------------------------------------
+// External imports
 import { SATELLITE_FILTER_RESULT_LIMIT } from "./config.js";
 import { elements } from "./dom.js";
 import { appState } from "./state.js";
@@ -21,9 +19,7 @@ import {
     normalizeSearchValue
 } from "./utils.js";
 
-// ---------------------------------------------------------------------------
-// SUB-MODULE RE-EXPORTS
-// ---------------------------------------------------------------------------
+// Sub-module re-exports
 export { setStatus, renderDefaultAnalysis, updateAreaReadout, renderAnalysisLoader } from "./ui/headerBar.js";
 export { renderCatalogStatus, formatDataAge, formatOpLastUpdate } from "./ui/catalogStatus.js";
 export { renderOperationalAlerts, resolveAlertType, buildAlertCard } from "./ui/alertRenderer.js";
@@ -42,9 +38,7 @@ export {
     renderSatelliteListItem
 } from "./ui/satellitePanel.js";
 
-// ---------------------------------------------------------------------------
-// INLINE FUNCTIONS (transitional — to be extracted in next refactor pass)
-// ---------------------------------------------------------------------------
+// Inline functions (transitional)
 
 function buildList(items, emptyMessage, className = "") {
     if (!items.length) {

@@ -125,7 +125,7 @@ function generateTrackForRevision(revision, orbits = 1.0, fixedGmst = null, refe
 
     const orbitMinutes = getOrbitMinutes(record);
     const totalMinutes = orbitMinutes * orbits;
-    // Why: drift rings are orbit paths too, so they need the same dense period-scaled sampling as the main preview.
+    // Drift rings need the same sampling density as the main preview.
     const stepSeconds = getOrbitSampleSeconds(record);
     const totalSteps = Math.floor((totalMinutes * 60) / stepSeconds);
 

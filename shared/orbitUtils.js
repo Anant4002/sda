@@ -10,7 +10,7 @@
     const MIN_SAMPLES_PER_REV = 180;
     const MIN_INTERVAL_S = 10;
 
-    // Why: LEO paths need period-scaled sampling to avoid straight-line distortion between sparse samples.
+    // LEO paths need period-scaled sampling to avoid straight-line distortion.
     function getSampleIntervalSeconds(satrec) {
         if (!satrec || !Number.isFinite(satrec.no) || satrec.no <= 0) {
             return MIN_INTERVAL_S;

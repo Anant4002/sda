@@ -8,9 +8,7 @@
 import { elements } from "../dom.js";
 import { escapeHtml, safeHtml, markSafe, formatDateTime, formatNumber } from "../utils.js";
 
-// ---------------------------------------------------------------------------
-// TYPE CONFIGURATION MAP
-// ---------------------------------------------------------------------------
+// Type configuration map
 const TYPE_CONFIGS = {
     conjunction: {
         label: "Conjunction",

@@ -14,16 +14,12 @@
 const fs = require('fs');
 const path = require('path');
 
-// ---------------------------------------------------------------------------
 // Configuration
-// ---------------------------------------------------------------------------
 const LOG_DIR = path.resolve(process.cwd(), 'logs');
 const LOG_RETENTION_DAYS = Number(process.env.LOG_RETENTION_DAYS) || 7;
 const FILE_LOGGING_ENABLED = process.env.FILE_LOGGING !== 'false'; // opt-out via env
 
-// ---------------------------------------------------------------------------
 // Directory bootstrap + log rotation
-// ---------------------------------------------------------------------------
 function ensureLogDir() {
     try {
         if (!fs.existsSync(LOG_DIR)) {
@@ -58,9 +54,7 @@ if (FILE_LOGGING_ENABLED) {
     pruneOldLogs();
 }
 
-// ---------------------------------------------------------------------------
 // File writer — appends a single JSON-line per call
-// ---------------------------------------------------------------------------
 function getLogFilePath() {
     const now = new Date();
     const date = now.toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
@@ -83,18 +77,14 @@ function writeToFile(level, context, message, meta) {
     }
 }
 
-// ---------------------------------------------------------------------------
 // Console formatter (preserves the original format)
-// ---------------------------------------------------------------------------
 function formatMessage(level, context, message, meta) {
     const timestamp = new Date().toISOString();
     const metaString = meta && Object.keys(meta).length ? ` | ${JSON.stringify(meta)}` : '';
     return `[${timestamp}] [${level}] [${context}] ${message}${metaString}`;
 }
 
-// ---------------------------------------------------------------------------
 // Public logger API
-// ---------------------------------------------------------------------------
 const logger = {
     info: (context, message, meta = {}) => {
         console.log(formatMessage('INFO', context, message, meta));

@@ -645,7 +645,7 @@ async function analyzeTargetManoeuvre(noradId, satelliteName, options = {}) {
     // 3. Proximity check against Indian Assets
     const { Satellite } = require("../models/satellite");
     const allSats = await Satellite.findAll({
-        // Why: some deployments still run the pre-2026-05-15 satellite schema, so keep this proximity lookup on legacy-safe columns.
+        // Keep lookup on legacy-safe columns for compatibility.
         attributes: ["name", "line1", "line2", "noradId"]
     });
     const incomingCatalog = allSats.map(s => ({

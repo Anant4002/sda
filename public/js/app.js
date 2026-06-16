@@ -77,9 +77,7 @@ let catalogStatusSnapshot = null;
 let catalogHistorySnapshot = [];
 let alertsSnapshot = null;
 
-// ============================================================================
-// CORE SHARED ACTIONS
-// ============================================================================
+// Core shared actions
 
 async function toggleSatellitePath(satelliteId) {
     if (appState.activeSatellitePathId === satelliteId) {
@@ -100,7 +98,7 @@ async function toggleSatellitePath(satelliteId) {
     appState.activeSatellitePathId = satelliteId;
     setStatus(`Propagating orbit for ${satelliteId}...`);
 
-    // Why: the path must start from the same propagation instant as the rendered satellite point or the orbit appears disconnected.
+    // The path must start from the same propagation instant as the rendered satellite point.
     const time = appState.simulationMode && appState.simulationClock
         ? appState.simulationClock.getTime()
         : Cesium.JulianDate.toDate(viewer.clock.currentTime).getTime();
@@ -273,9 +271,7 @@ function ensureFirstAddedAt(sats) {
     });
 }
 
-// ============================================================================
-// APPLICATION INITIALIZATION
-// ============================================================================
+// Application initialization
 async function initializeApplication() {
     try {
         // Initialize module host with context

@@ -24,7 +24,7 @@ function getOrbitMinutes(record) {
 }
 
 function getOrbitSampleSeconds(record) {
-    // Why: worker-generated path previews must match the shared satrec-based sampling density used elsewhere.
+    // Path previews must match the shared satrec-based sampling density.
     return orbitUtils.getSampleIntervalSeconds(record?.satrec);
 }
 

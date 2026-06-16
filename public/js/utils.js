@@ -86,7 +86,7 @@ export function buildSatelliteGroups(satellites) {
     }
 
     return Array.from(groupMap.values()).sort((first, second) => {
-        // Why: denser groups are more useful operationally, so show the largest satellite families first.
+        // Sort by group size descending, then alphabetically
         if (second.count !== first.count) {
             return second.count - first.count;
         }

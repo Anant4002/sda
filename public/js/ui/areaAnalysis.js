@@ -26,9 +26,7 @@ function buildList(items, emptyMessage, className = "") {
     return markSafe(`<div class="list">${items.map(item => `<div class="list-item ${className}">${item}</div>`).join("")}</div>`);
 }
 
-// ---------------------------------------------------------------------------
-// BLIND SPOT
-// ---------------------------------------------------------------------------
+// Blind spot
 export function renderBlindSpotAnalysis(result) {
     if (!elements.analysisPanel) return;
     const windows = Array.isArray(result.blindWindows) ? result.blindWindows : [];
@@ -93,9 +91,7 @@ export function renderBlindSpotAnalysis(result) {
     `;
 }
 
-// ---------------------------------------------------------------------------
-// VOLUMETRIC SCAN
-// ---------------------------------------------------------------------------
+// Volumetric scan
 export function renderVolumetricScanAnalysis(result, passes) {
     if (!elements.analysisPanel) return;
     const minAltitude = result.minAltitudeKm ?? 0;
@@ -204,9 +200,7 @@ export function renderVolumetricScanAnalysis(result, passes) {
     }, 0);
 }
 
-// ---------------------------------------------------------------------------
-// COLLISION DETECTION
-// ---------------------------------------------------------------------------
+// Collision detection
 export function renderCollisionDetectionAnalysis(result) {
     if (!elements.analysisPanel) return;
     const thresholdLabel = result.proximityThresholdKm || result.conjunctionThresholdKm || 25;
@@ -267,9 +261,7 @@ export function renderCollisionDetectionAnalysis(result) {
     appState.lastCollisionResult = result;
 }
 
-// ---------------------------------------------------------------------------
-// CONJUNCTION ANALYSIS
-// ---------------------------------------------------------------------------
+// Conjunction analysis
 export function renderConjunctionAnalysis(result) {
     if (!elements.analysisPanel) return;
     let conjunctions = (Array.isArray(result.conjunctions) ? result.conjunctions : [])
@@ -356,9 +348,7 @@ export function renderConjunctionAnalysis(result) {
     appState.lastConjunctionResult = result;
 }
 
-// ---------------------------------------------------------------------------
-// GENERAL AREA ANALYSIS DISPATCHER
-// ---------------------------------------------------------------------------
+// General area analysis dispatcher
 export function renderAreaAnalysis(result) {
     if (!elements.analysisPanel) return;
 

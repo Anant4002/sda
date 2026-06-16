@@ -24,9 +24,7 @@ function checkpoint(minute, title, summary) {
 }
 
 const trainingScenarios = [
-    // =========================================================
-    // EXISTING SCENARIOS — enhanced with new metadata fields
-    // =========================================================
+    // Existing scenarios
     {
         id: "hist-gsat7r-conjunction",
         title: "Historical Indian Conjunction Replay",
@@ -730,9 +728,7 @@ const trainingScenarios = [
         ]
     },
 
-    // =========================================================
-    // NEW SCENARIOS — Phase-1 Additions
-    // =========================================================
+    // New scenarios
 
     {
         id: "synthetic-asat-threat",

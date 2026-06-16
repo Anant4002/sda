@@ -9,9 +9,7 @@ import { elements } from "../dom.js";
 import { appState } from "../state.js";
 import { escapeHtml, safeHtml, markSafe, formatDateTime, formatNumber } from "../utils.js";
 
-// ---------------------------------------------------------------------------
-// COLLISION ALERT STATE
-// ---------------------------------------------------------------------------
+// Collision alert state
 
 function getCollisionAlertState(conjunctions, thresholdKm) {
     if (!Array.isArray(conjunctions) || !conjunctions.length) {
@@ -29,9 +27,7 @@ function getCollisionAlertState(conjunctions, thresholdKm) {
     return { level: "monitor", label: "Monitor" };
 }
 
-// ---------------------------------------------------------------------------
-// COLLISION ALERT CARD
-// ---------------------------------------------------------------------------
+// Collision alert card
 
 export function updateCollisionAlert(result = null) {
     if (!elements.collisionAlertCard || !elements.collisionAlertBadge || !elements.collisionAlertSummary) {
@@ -71,9 +67,7 @@ export function updateCollisionAlert(result = null) {
 // Backward-compat alias
 export const renderCollisionAlert = updateCollisionAlert;
 
-// ---------------------------------------------------------------------------
-// SATELLITE DETAIL PANEL
-// ---------------------------------------------------------------------------
+// Satellite detail panel
 
 export function renderSatellitePath(result) {
     if (!elements.analysisPanel) return;

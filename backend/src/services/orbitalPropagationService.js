@@ -145,7 +145,7 @@ function getOrbitMinutes(record) {
 }
 
 function getOrbitSampleSeconds(record) {
-    // Why: all orbit-path producers should share the same satrec-driven sampling rule to keep shapes consistent.
+    // Share the same satrec-driven sampling rule to keep shapes consistent.
     return getSampleIntervalSeconds(record?.satrec);
 }
 
@@ -157,7 +157,7 @@ function buildOrbitPathSamples(record, startDate, endDate) {
     const sampleStepSeconds = getOrbitSampleSeconds(record);
     const samples = [];
 
-    // Why: visualization paths need dense, period-scaled resampling instead of inheriting coarse analysis step spacing.
+    // Visualization paths need dense, period-scaled resampling instead of inheriting coarse analysis step spacing.
     for (let timeMs = startDate.getTime(); timeMs <= endDate.getTime(); timeMs += sampleStepSeconds * 1000) {
         const time = new Date(timeMs);
         const state = propagateState(record, time, null);
@@ -264,7 +264,7 @@ function findTcaBetweenRecords(record1, record2, windowStart, windowDurationSeco
 
 /**
  * Analytical Probability of Collision (Pc) using the Foster method (2D simplification).
- * Why: Standard in space operations for TLE-based risk assessment.
+ * Standard in space operations for TLE-based risk assessment.
  *
  * Sigma estimation uses orbit-class-aware covariance tables rather than a flat
  * heuristic, providing more realistic Pc values per orbital regime:
@@ -285,9 +285,7 @@ function findTcaBetweenRecords(record1, record2, windowStart, windowDurationSeco
 function calculateFosterPc(missDistanceKm, relativeVelocityKmS, primarySatrec, secondarySatrec, tcaDate, combinedRadiusMeters = 10) {
     if (missDistanceKm <= 0) return { pc: 1.0, pcMethod: 'foster_orbit_class_sigma', sigma: 0 };
 
-    // -----------------------------------------------------------------------
-    // 1. Orbit-class sigma estimation
-    // -----------------------------------------------------------------------
+    // Orbit-class sigma estimation
     const julianDateToDate = (jd) => new Date((jd - 2440587.5) * 86400000);
 
     // Sigma coefficients indexed by orbit class
@@ -337,10 +335,8 @@ function calculateFosterPc(missDistanceKm, relativeVelocityKmS, primarySatrec, s
     // Combined sigma in the encounter plane (RSS)
     const sigma = Math.sqrt(sigma1 * sigma1 + sigma2 * sigma2);
 
-    // -----------------------------------------------------------------------
-    // 2. Foster 2D Integration (simplified for circular hard-body)
-    //    Pc = exp(-0.5 × (d/σ)²) × (1 − exp(-0.5 × (R/σ)²))
-    // -----------------------------------------------------------------------
+    // Foster 2D Integration (simplified for circular hard-body)
+    // Pc = exp(-0.5 × (d/σ)²) × (1 − exp(-0.5 × (R/σ)²)）
     const R = combinedRadiusMeters / 1000; // m → km
     const d = missDistanceKm;
 

@@ -11,13 +11,7 @@
 
 'use strict';
 
-// ---------------------------------------------------------------------------
-// SENSOR REGISTRY
-// ---------------------------------------------------------------------------
-// Each entry represents a representative ground-truth or tracking asset.
-// isRepresentative = true means this is a placeholder for a real sensor
-// category; the configuration can be replaced with live endpoint data.
-// ---------------------------------------------------------------------------
+// Sensor Registry
 const SENSOR_REGISTRY = [
     {
         id: 'S-OPT-MNTABU',
@@ -174,9 +168,7 @@ const SENSOR_REGISTRY = [
 // In-memory sensor map for fast lookup
 const _sensorMap = new Map(SENSOR_REGISTRY.map(s => [s.id, s]));
 
-// ---------------------------------------------------------------------------
-// NORMALISATION HELPERS
-// ---------------------------------------------------------------------------
+// Normalisation helpers
 
 /**
  * Normalise a JSON REST format track point.
@@ -233,9 +225,7 @@ function _normalizeNmeaPoint(raw) {
     };
 }
 
-// ---------------------------------------------------------------------------
-// PUBLIC API
-// ---------------------------------------------------------------------------
+// Public API
 
 /**
  * Normalise a raw sensor track into the canonical observation array.

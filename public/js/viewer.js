@@ -226,7 +226,7 @@ export function clearDriftTracks() {
 }
 
 function transformEciToFixedAtSampleTime(eciPosition, sampleTime) {
-    // Why: satellite.js propagates TEME states, so using an ICRF transform warps orbit geometry even when sampled per-point.
+    // TEME states propagated by satellite.js require transform to fixed frame.
     const temeToFixed = Cesium.Transforms.computeTemeToPseudoFixedMatrix(sampleTime);
     if (!Cesium.defined(temeToFixed)) {
         return null;
@@ -919,7 +919,7 @@ export function toggleGlobeRotation() {
     setStatus(appState.isGlobeRotationEnabled ? "Globe rotation enabled." : "Globe rotation disabled.");
 }
 
-// Why: keep user camera controls smooth; orbit geometry already updates in the chosen frame without forcing the camera transform every frame.
+// Simple globe rotation listener when rotation is enabled.
 viewer.scene.postUpdate.addEventListener((scene, time) => {
     if (appState.isGlobeRotationEnabled && !appState.isFocusMode) {
         // Simple rotation around Z axis for visual effect
@@ -952,7 +952,7 @@ export function drawPredictedPaths(paths) {
 
         const entity = viewer.entities.add({
             polyline: {
-                // Why: a slight altitude separation makes old-vs-new orbit comparisons readable without changing the underlying shape.
+                // Use a slight altitude separation to make orbit comparisons readable.
                 positions: buildPathPositionsProperty(path.samples, {
                     altitudeOffsetMeters: (index - centeredOffsetIndex) * 18000,
                     renderFrame: path.renderFrame || "earthFixed"
