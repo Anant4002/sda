@@ -2,7 +2,6 @@
  * ui/alertRenderer.js
  *
  * Renders operational alert cards in the analysis panel.
- * Extracted from the monolithic ui.js — exported via ui.js barrel.
  */
 
 import { elements } from "../dom.js";

@@ -262,37 +262,48 @@ router.get("/catalog/latest-new-satellites", requireApiKey, async (req, res) => 
         const { Satellite } = require("../models/satellite");
         const { Debris } = require("../models/debris");
         const { RocketBody } = require("../models/rocketBody");
+        const { CatalogSyncRun } = require("../models/catalogSyncRun");
+        const { CatalogSyncNewSatellite } = require("../models/catalogSyncNewSatellite");
         const { serializeSatellite } = require("../services/satelliteMetadataService");
 
+        // Strategy 1: Use the latest sync run's tracked new-satellite records
+        const latestSyncRun = await CatalogSyncRun.findOne({
+            order: [["completedAt", "DESC"]]
+        });
+
+        if (latestSyncRun && latestSyncRun.newSatellitesFound > 0) {
+            const newSyncEntries = await CatalogSyncNewSatellite.findAll({
+                where: { syncRunId: latestSyncRun.id }
+            });
+            const noradIds = newSyncEntries.map(e => e.noradId).filter(Boolean);
+
+            if (noradIds.length > 0) {
+                const noradFilter = { noradId: { [Op.in]: noradIds } };
+                const [satellites, debris, rocketBodies] = await Promise.all([
+                    Satellite.findAll({ where: noradFilter }),
+                    Debris.findAll({ where: noradFilter }),
+                    RocketBody.findAll({ where: noradFilter })
+                ]);
+
+                const allObjects = [...satellites, ...debris, ...rocketBodies];
+                const serialized = allObjects.map(serializeSatellite);
+                return res.json({ satellites: serialized, source: "sync_run", syncRunId: latestSyncRun.id });
+            }
+        }
+
+        // Strategy 2: Fallback — query by firstAddedAt within the last 30 days
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const dateFilter = { firstAddedAt: { [Op.gte]: thirtyDaysAgo } };
 
         const [satellites, debris, rocketBodies] = await Promise.all([
-            Satellite.findAll({
-                where: {
-                    firstAddedAt: {
-                        [Op.gte]: thirtyDaysAgo
-                    }
-                }
-            }),
-            Debris.findAll({
-                where: {
-                    firstAddedAt: {
-                        [Op.gte]: thirtyDaysAgo
-                    }
-                }
-            }),
-            RocketBody.findAll({
-                where: {
-                    firstAddedAt: {
-                        [Op.gte]: thirtyDaysAgo
-                    }
-                }
-            })
+            Satellite.findAll({ where: dateFilter }),
+            Debris.findAll({ where: dateFilter }),
+            RocketBody.findAll({ where: dateFilter })
         ]);
 
         const allObjects = [...satellites, ...debris, ...rocketBodies];
         const serialized = allObjects.map(serializeSatellite);
-        res.json({ satellites: serialized });
+        res.json({ satellites: serialized, source: "first_added_at" });
     } catch (error) {
         console.error("Failed to load latest new satellites:", error);
         res.status(500).json({ error: "Unable to load latest new satellites." });
